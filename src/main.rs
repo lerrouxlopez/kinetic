@@ -22,6 +22,14 @@ use controllers::admin_controller::{
     admin_workspace_new_form,
     admin_workspace_update,
 };
+use controllers::crew_controller::{
+    crew_create,
+    crew_delete,
+    crew_edit_form,
+    crew_index,
+    crew_new_form,
+    crew_update,
+};
 use controllers::public_controller::{
     dashboard,
     index,
@@ -68,6 +76,12 @@ fn rocket() -> _ {
                 admin_workspace_edit_form,
                 admin_workspace_update,
                 admin_workspace_delete,
+                crew_index,
+                crew_new_form,
+                crew_create,
+                crew_edit_form,
+                crew_update,
+                crew_delete,
                 dashboard
             ],
         )

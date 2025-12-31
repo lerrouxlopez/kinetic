@@ -47,6 +47,22 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     .execute(&db.0)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS crews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            name TEXT NOT NULL,
+            members_count INTEGER NOT NULL DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'Active',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
     seed_admin(db).await?;
 
     Ok(())

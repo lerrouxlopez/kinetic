@@ -1,38 +1,74 @@
 {% extends "layout" %}
 
 {% block content %}
-  <div class="d-flex flex-column flex-lg-row align-items-start gap-4">
-    <div class="card glass-card p-4 flex-fill">
-      <h2 class="h4 fw-bold">Welcome to {{ tenant_slug }}</h2>
-      <p class="text-muted">Signed in as {{ email }}.</p>
-      <div class="row g-3 mt-3">
-        <div class="col-md-4">
-          <div class="stat-tile">
-            <div class="stat-label">Checked out</div>
-            <div class="stat-value">42</div>
+  <div class="dashboard-page">
+    <div class="dashboard-shell">
+      <aside class="dashboard-nav">
+        <div class="dashboard-nav-header">
+          <p class="text-muted text-uppercase tracking-wide mb-1">Workspace</p>
+          <h2 class="h5 fw-bold mb-0">{{ tenant_slug }}</h2>
+          <p class="text-muted small mb-0">Signed in as {{ email }}</p>
+        </div>
+        <nav class="nav flex-column mt-4">
+          <a class="nav-link active" href="#">Dashboard</a>
+          <a class="nav-link" href="#">Settings</a>
+          <a class="nav-link" href="/crew">Crew roster</a>
+          <a class="nav-link" href="#">Clients</a>
+        </nav>
+      </aside>
+      <section class="dashboard-main">
+        <div class="card glass-card p-4">
+          <h2 class="h4 fw-bold">Operations overview</h2>
+          <p class="text-muted">Live stats across assets and manpower.</p>
+          <div class="row g-3 mt-3">
+            <div class="col-md-4">
+              <div class="stat-tile">
+                <div class="stat-label">Checked out</div>
+                <div class="stat-value">42</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-tile">
+                <div class="stat-label">On-site staff</div>
+                <div class="stat-value">18</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-tile">
+                <div class="stat-label">Outstanding tasks</div>
+                <div class="stat-value">7</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="col-md-4">
-          <div class="stat-tile">
-            <div class="stat-label">On-site staff</div>
-            <div class="stat-value">18</div>
+        <div class="row g-4 mt-1">
+          <div class="col-lg-7">
+            <div class="card glass-card p-4 h-100">
+              <h3 class="h5 fw-semibold">Asset utilization</h3>
+              <p class="text-muted">Weekly checkouts vs returns.</p>
+              <div class="graph-placeholder">
+                <div class="graph-line"></div>
+                <div class="graph-line line-2"></div>
+                <div class="graph-line line-3"></div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="card glass-card p-4 h-100">
+              <h3 class="h5 fw-semibold">Crew allocation</h3>
+              <p class="text-muted">Shift coverage by zone.</p>
+              <div class="graph-placeholder donut">
+                <div class="donut-core">74%</div>
+              </div>
+              <div class="d-flex justify-content-between mt-3 text-muted small">
+                <span>North</span>
+                <span>East</span>
+                <span>South</span>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="col-md-4">
-          <div class="stat-tile">
-            <div class="stat-label">Outstanding tasks</div>
-            <div class="stat-value">7</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="card glass-card p-4 dashboard-side">
-      <h3 class="h5 fw-semibold">Next steps</h3>
-      <ul class="text-muted mt-3 list-unstyled">
-        <li class="mb-2">Define asset categories and locations.</li>
-        <li class="mb-2">Invite supervisors into your tenant.</li>
-        <li class="mb-2">Add the first crew roster.</li>
-      </ul>
+      </section>
     </div>
   </div>
 {% endblock content %}

@@ -28,6 +28,13 @@ pub struct WorkspaceForm {
     pub name: String,
 }
 
+#[derive(FromForm)]
+pub struct CrewForm {
+    pub name: String,
+    pub members_count: i64,
+    pub status: String,
+}
+
 pub struct User {
     pub id: i64,
     pub tenant_id: i64,
@@ -50,6 +57,15 @@ pub struct Workspace {
 pub struct UserAuth {
     pub user: User,
     pub password_hash: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Crew {
+    pub id: i64,
+    pub tenant_id: i64,
+    pub name: String,
+    pub members_count: i64,
+    pub status: String,
 }
 
 pub struct AdminAuth {
@@ -79,6 +95,22 @@ pub struct AdminLoginView {
 pub struct WorkspaceFormView {
     pub slug: String,
     pub name: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct CrewFormView {
+    pub name: String,
+    pub members_count: i64,
+    pub status: String,
+}
+
+#[derive(Serialize)]
+pub struct CrewStats {
+    pub total_crews: usize,
+    pub active_crews: usize,
+    pub idle_crews: usize,
+    pub on_leave_crews: usize,
+    pub total_members: i64,
 }
 
 #[derive(Serialize)]
@@ -130,6 +162,16 @@ impl WorkspaceFormView {
         WorkspaceFormView {
             slug: slug.into(),
             name: name.into(),
+        }
+    }
+}
+
+impl CrewFormView {
+    pub fn new(name: impl Into<String>, members_count: i64, status: impl Into<String>) -> Self {
+        CrewFormView {
+            name: name.into(),
+            members_count,
+            status: status.into(),
         }
     }
 }
