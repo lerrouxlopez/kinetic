@@ -1,0 +1,13 @@
+[package]
+name = "kinetic"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rocket = { version = "0.5.1", features = ["json", "secrets"] }
+rocket_db_pools = { version = "0.1.0", features = ["sqlx_sqlite", "sqlx_mysql"] }
+rocket_dyn_templates = { version = "0.1.0", features = ["tera"] }
+argon2 = "0.5"
+password-hash = "0.5"
+rand_core = "0.6"
+serde = { version = "1", features = ["derive"] }

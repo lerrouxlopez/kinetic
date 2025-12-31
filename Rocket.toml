@@ -1,0 +1,7 @@
+[default]
+address = "127.0.0.1"
+port = 8000
+secret_key = "3aa0d2003ffc29b0e2e94b0236edf52b419d8ab1a51ad1de7e4c3365295693a7"
+
+[default.databases]
+kinetic_db = { url = "sqlite://kinetic.db" }

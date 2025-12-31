@@ -1,0 +1,35 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card glass-card p-4">
+        <h2 class="h4 fw-bold">Create your workspace</h2>
+        <p class="text-muted">Start a branded tenant for your crew or site.</p>
+        {% if error %}
+          <div class="alert alert-danger mt-3">{{ error }}</div>
+        {% endif %}
+        <form class="mt-4" method="post" action="/register">
+          <div class="mb-3">
+            <label class="form-label">Workspace slug</label>
+            <input class="form-control" name="tenant_slug" value="{{ form.tenant_slug }}" placeholder="acme-ops" required>
+            <div class="form-text text-muted">Lowercase letters, numbers, and dashes.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Workspace name</label>
+            <input class="form-control" name="tenant_name" value="{{ form.tenant_name }}" placeholder="Acme Operations">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" name="email" value="{{ form.email }}" required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Password</label>
+            <input class="form-control" type="password" name="password" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit">Create workspace</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock content %}
