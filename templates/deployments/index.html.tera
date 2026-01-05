@@ -1,0 +1,67 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex flex-column flex-lg-row align-items-start justify-content-between gap-3 mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">Deployments</h2>
+        <p class="text-muted mb-0">Deploy crews to clients and track their progress.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/dashboard">Back to dashboard</a>
+        <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/deployments/new">New deployment</a>
+      </div>
+    </div>
+
+    {% if deployments | length == 0 %}
+      <div class="card glass-card p-4 text-center text-muted">
+        No deployments yet.
+      </div>
+    {% endif %}
+
+    {% for group in deployments %}
+      <div class="card glass-card p-3 mb-4">
+        <div class="d-flex align-items-center justify-content-between mb-3 px-2">
+          <div>
+            <div class="text-muted text-uppercase small">Client</div>
+            <div class="fw-semibold">{{ group.client_name }}</div>
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/deployments/new">Add deployment</a>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Crew</th>
+                <th>Start</th>
+                <th>Finish</th>
+                <th>Fee</th>
+                <th>Status</th>
+                <th>Info</th>
+                <th class="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for deployment in group.deployments %}
+                <tr>
+                  <td>{{ deployment.crew_name }}</td>
+                  <td>{{ deployment.start_at }}</td>
+                  <td>{{ deployment.end_at }}</td>
+                  <td>{{ deployment.calculated_fee }} {{ group.client_currency }}</td>
+                  <td><span class="badge crew-badge">{{ deployment.status }}</span></td>
+                  <td>{{ deployment.info }}</td>
+                  <td class="text-end">
+                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/deployments/{{ deployment.id }}/edit">Edit</a>
+                    <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/deployments/{{ deployment.id }}/delete">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% endblock content %}

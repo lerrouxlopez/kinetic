@@ -1,4 +1,10 @@
 pub mod admin_repo;
+pub mod client_repo;
 pub mod crew_repo;
+pub mod crew_member_repo;
+pub mod appointment_repo;
+pub mod deployment_repo;
+pub mod deployment_update_repo;
+pub mod email_repo;
 pub mod tenant_repo;
 pub mod user_repo;

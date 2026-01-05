@@ -3,9 +3,59 @@ use rocket::http::CookieJar;
 use rocket::response::Redirect;
 use rocket_dyn_templates::{context, Template};
 
-use crate::models::{CrewForm, CrewFormView, CurrentUserView};
+use crate::models::{
+    CrewForm,
+    CrewFormView,
+    CrewMemberForm,
+    CrewMemberFormView,
+    CurrentUserView,
+    PaginationView,
+};
 use crate::services::{auth_service, crew_service};
 use crate::Db;
+
+const PER_PAGE: usize = 10;
+
+fn normalize_page(page: Option<usize>) -> usize {
+    page.unwrap_or(1).max(1)
+}
+
+fn pagination_view(
+    page: usize,
+    total_count: i64,
+    build_url: impl Fn(usize) -> String,
+) -> PaginationView {
+    let per_page = PER_PAGE as i64;
+    let total_pages = ((total_count + per_page - 1) / per_page).max(1) as usize;
+    let page = page.min(total_pages).max(1);
+    let has_prev = page > 1;
+    let has_next = page < total_pages;
+    let prev_url = if has_prev {
+        build_url(page - 1)
+    } else {
+        build_url(1)
+    };
+    let next_url = if has_next {
+        build_url(page + 1)
+    } else {
+        build_url(total_pages)
+    };
+
+    PaginationView {
+        page,
+        total_pages,
+        has_prev,
+        has_next,
+        prev_url,
+        next_url,
+    }
+}
+
+fn empty_members_pagination(slug: &str, crew_id: i64) -> PaginationView {
+    pagination_view(1, 0, |target_page| {
+        format!("/{}/crew/{}/profile?members_page={}", slug, crew_id, target_page)
+    })
+}
 
 async fn tenant_from_cookies(
     cookies: &CookieJar<'_>,
@@ -23,17 +73,37 @@ async fn tenant_from_cookies(
     }
 }
 
-#[get("/crew")]
-pub async fn crew_index(cookies: &CookieJar<'_>, db: &Db) -> Result<Template, Redirect> {
+#[get("/<slug>/crew?<page>")]
+pub async fn crew_index(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    page: Option<usize>,
+) -> Result<Template, Redirect> {
     let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
 
-    let crews = crew_service::list_crews(db, tenant_id)
+    let all_crews = crew_service::list_crews(db, tenant_id)
         .await
         .unwrap_or_default();
-    let stats = crew_service::stats_from_crews(&crews);
+    let stats = crew_service::stats_from_crews(&all_crews);
+    let page = normalize_page(page);
+    let offset = ((page - 1) * PER_PAGE) as i64;
+    let crews = crew_service::list_crews_paged(db, tenant_id, PER_PAGE as i64, offset)
+        .await
+        .unwrap_or_default();
+    let total_crews = crew_service::count_crews(db, tenant_id).await.unwrap_or(0);
+    let pagination = pagination_view(page, total_crews, |target_page| {
+        format!("/{}/crew?page={}", current_user.tenant_slug, target_page)
+    });
 
     Ok(Template::render(
         "crew/index",
@@ -42,16 +112,87 @@ pub async fn crew_index(cookies: &CookieJar<'_>, db: &Db) -> Result<Template, Re
             current_user: Some(current_user),
             crews: crews,
             stats: stats,
+            pagination: pagination,
         },
     ))
 }
 
-#[get("/crew/new")]
-pub async fn crew_new_form(cookies: &CookieJar<'_>, db: &Db) -> Result<Template, Redirect> {
+#[get("/<slug>/crew/<id>/profile?<members_page>")]
+pub async fn crew_show(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    members_page: Option<usize>,
+) -> Result<Template, Redirect> {
+    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    let tenant_slug = current_user.tenant_slug.clone();
+
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Ok(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    crews: Vec::<crate::models::Crew>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    let members_page = normalize_page(members_page);
+    let offset = ((members_page - 1) * PER_PAGE) as i64;
+    let members = crew_service::list_members_paged(db, tenant_id, id, PER_PAGE as i64, offset)
+        .await
+        .unwrap_or_default();
+    let total_members = crew_service::count_members(db, tenant_id, id).await.unwrap_or(0);
+    let members_pagination = pagination_view(members_page, total_members, |target_page| {
+        format!(
+            "/{}/crew/{}/profile?members_page={}",
+            tenant_slug, id, target_page
+        )
+    });
+
+    Ok(Template::render(
+        "crew/show",
+        context! {
+            title: "Crew details",
+            current_user: Some(current_user),
+            crew: crew,
+            members: members,
+            members_count: total_members as usize,
+            members_pagination: members_pagination,
+        },
+    ))
+}
+
+#[get("/<slug>/crew/new")]
+pub async fn crew_new_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+) -> Result<Template, Redirect> {
     let (_, current_user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_new_form(slug = current_user.tenant_slug))));
+    }
 
     Ok(Template::render(
         "crew/new",
@@ -65,19 +206,29 @@ pub async fn crew_new_form(cookies: &CookieJar<'_>, db: &Db) -> Result<Template,
     ))
 }
 
-#[post("/crew", data = "<form>")]
+#[post("/<slug>/crew", data = "<form>")]
 pub async fn crew_create(
     cookies: &CookieJar<'_>,
     db: &Db,
+    slug: &str,
     form: Form<CrewForm>,
 ) -> Result<Redirect, Template> {
     let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
     let form = form.into_inner();
     match crew_service::create_crew(db, tenant_id, form).await {
-        Ok(_) => Ok(Redirect::to(uri!(crew_index))),
+        Ok(_) => Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        )))),
         Err(err) => Err(Template::render(
             "crew/new",
             context! {
@@ -91,16 +242,20 @@ pub async fn crew_create(
     }
 }
 
-#[get("/crew/<id>/edit")]
+#[get("/<slug>/crew/<id>/edit")]
 pub async fn crew_edit_form(
     cookies: &CookieJar<'_>,
     db: &Db,
+    slug: &str,
     id: i64,
 ) -> Result<Template, Redirect> {
     let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_edit_form(slug = current_user.tenant_slug, id = id))));
+    }
 
     let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
         Ok(Some(crew)) => crew,
@@ -131,10 +286,303 @@ pub async fn crew_edit_form(
     ))
 }
 
-#[post("/crew/<id>", data = "<form>")]
+#[get("/<slug>/crew/<id>/members/new")]
+pub async fn crew_member_new_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+) -> Result<Template, Redirect> {
+    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_member_new_form(
+            slug = current_user.tenant_slug,
+            id = id
+        ))));
+    }
+
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Ok(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    crews: Vec::<crate::models::Crew>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    Ok(Template::render(
+        "crew/member_new",
+        context! {
+            title: "New member",
+            current_user: Some(current_user),
+            error: Option::<String>::None,
+            crew: crew,
+            form: CrewMemberFormView::new("", "", "", ""),
+        },
+    ))
+}
+
+#[post("/<slug>/crew/<id>/members", data = "<form>")]
+pub async fn crew_member_create(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    form: Form<CrewMemberForm>,
+) -> Result<Redirect, Template> {
+    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Err(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    crews: Vec::<crate::models::Crew>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    match crew_service::create_member(db, tenant_id, id, form).await {
+        Ok(_) => Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        )))),
+        Err(err) => Err(Template::render(
+            "crew/member_new",
+            context! {
+                title: "New member",
+                current_user: Some(current_user),
+                error: err.message,
+                crew: crew,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[get("/<slug>/crew/<id>/members/<member_id>/edit")]
+pub async fn crew_member_edit_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    member_id: i64,
+) -> Result<Template, Redirect> {
+    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_member_edit_form(
+            slug = current_user.tenant_slug,
+            id = id,
+            member_id = member_id
+        ))));
+    }
+
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Ok(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    crews: Vec::<crate::models::Crew>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    let member = match crew_service::find_member_by_id(db, tenant_id, id, member_id).await {
+        Ok(Some(member)) => member,
+        _ => {
+            let tenant_slug = current_user.tenant_slug.clone();
+            let members_pagination = empty_members_pagination(&tenant_slug, id);
+            return Ok(Template::render(
+                "crew/show",
+                context! {
+                    title: "Crew details",
+                    current_user: Some(current_user),
+                    crew: crew,
+                    members: Vec::<crate::models::CrewMember>::new(),
+                    members_count: 0,
+                    members_pagination: members_pagination,
+                    error: "Member not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    Ok(Template::render(
+        "crew/member_edit",
+        context! {
+            title: "Edit member",
+            current_user: Some(current_user),
+            crew: crew,
+            error: Option::<String>::None,
+            member_id: member.id,
+            form: CrewMemberFormView::new(
+                member.name,
+                member.phone,
+                member.email,
+                member.position,
+            ),
+        },
+    ))
+}
+
+#[post("/<slug>/crew/<id>/members/<member_id>", data = "<form>")]
+pub async fn crew_member_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    member_id: i64,
+    form: Form<CrewMemberForm>,
+) -> Result<Redirect, Template> {
+    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Err(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    crews: Vec::<crate::models::Crew>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    match crew_service::update_member(db, tenant_id, id, member_id, form).await {
+        Ok(_) => Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        )))),
+        Err(err) => Err(Template::render(
+            "crew/member_edit",
+            context! {
+                title: "Edit member",
+                current_user: Some(current_user),
+                crew: crew,
+                error: err.message,
+                member_id: member_id,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[post("/<slug>/crew/<id>/members/<member_id>/delete")]
+pub async fn crew_member_delete(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    member_id: i64,
+) -> Result<Redirect, Template> {
+    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Err(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    crews: Vec::<crate::models::Crew>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                },
+            ))
+        }
+    };
+
+    if let Err(message) = crew_service::delete_member(db, tenant_id, id, member_id).await {
+        let tenant_slug = current_user.tenant_slug.clone();
+        let members_pagination = empty_members_pagination(&tenant_slug, id);
+        return Err(Template::render(
+            "crew/show",
+            context! {
+                title: "Crew details",
+                current_user: Some(current_user),
+                crew: crew,
+                members: Vec::<crate::models::CrewMember>::new(),
+                members_count: 0,
+                members_pagination: members_pagination,
+                error: message,
+            },
+        ));
+    }
+
+    Ok(Redirect::to(uri!(crew_show(
+        slug = current_user.tenant_slug,
+        id = id,
+        members_page = Option::<usize>::None
+    ))))
+}
+
+#[post("/<slug>/crew/<id>", data = "<form>")]
 pub async fn crew_update(
     cookies: &CookieJar<'_>,
     db: &Db,
+    slug: &str,
     id: i64,
     form: Form<CrewForm>,
 ) -> Result<Redirect, Template> {
@@ -142,9 +590,18 @@ pub async fn crew_update(
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
     let form = form.into_inner();
     match crew_service::update_crew(db, tenant_id, id, form).await {
-        Ok(_) => Ok(Redirect::to(uri!(crew_index))),
+        Ok(_) => Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        )))),
         Err(err) => Err(Template::render(
             "crew/edit",
             context! {
@@ -159,16 +616,23 @@ pub async fn crew_update(
     }
 }
 
-#[post("/crew/<id>/delete")]
+#[post("/<slug>/crew/<id>/delete")]
 pub async fn crew_delete(
     cookies: &CookieJar<'_>,
     db: &Db,
+    slug: &str,
     id: i64,
 ) -> Result<Redirect, Template> {
     let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
 
     if let Err(message) = crew_service::delete_crew(db, tenant_id, id).await {
         return Err(Template::render(
@@ -183,5 +647,8 @@ pub async fn crew_delete(
         ));
     }
 
-    Ok(Redirect::to(uri!(crew_index)))
+    Ok(Redirect::to(uri!(crew_index(
+        slug = current_user.tenant_slug,
+        page = Option::<usize>::None
+    ))))
 }

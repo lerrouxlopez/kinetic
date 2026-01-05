@@ -13,6 +13,8 @@ body.app-shell {
   color: var(--kinetic-ink);
   background: radial-gradient(circle at top left, #fff1e8, #f8fafc 55%, #eef2ff 100%);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-glow {
@@ -37,6 +39,15 @@ body.app-shell {
   gap: 12px;
   font-size: 1.25rem;
   line-height: 1.1;
+}
+
+.brand-title {
+  font-family: "Avenir Next", "Avenir", "Futura", "Trebuchet MS", sans-serif;
+  font-style: italic;
+  font-weight: 900;
+  font-size: clamp(1.6rem, 2.2vw, 2.4rem);
+  letter-spacing: 0.02em;
+  color: #4b5563;
 }
 
 .navbar .btn-outline-light {
@@ -78,6 +89,116 @@ body.app-shell {
   font-weight: 600;
 }
 
+.tracking-chart {
+  min-height: 180px;
+  padding: 1rem 0.5rem;
+}
+
+.tracking-chart .chart-bar {
+  width: 44px;
+  min-height: 24px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #f59e0b 0%, #ef4444 100%);
+}
+
+.tracking-area-chart {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.tracking-area-chart svg {
+  width: 100%;
+  height: 240px;
+  display: block;
+}
+
+.tracking-chart-labels {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(80px, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.tracking-chart-label {
+  text-align: center;
+}
+
+.stagebar {
+  display: flex;
+  align-items: stretch;
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+}
+
+.stagebar-step {
+  position: relative;
+  flex: 1;
+  padding: 10px 16px;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  color: #6b7280;
+  background: rgba(245, 158, 11, 0.12);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stagebar-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: -22px;
+  width: 0;
+  height: 0;
+  border-top: 22px solid transparent;
+  border-bottom: 22px solid transparent;
+  border-left: 22px solid rgba(245, 158, 11, 0.12);
+  z-index: 2;
+}
+
+.stagebar-step:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-top: 22px solid transparent;
+  border-bottom: 22px solid transparent;
+  border-left: 22px solid #fff7ed;
+  z-index: 1;
+}
+
+.stagebar-step.is-complete {
+  background: rgba(245, 158, 11, 0.7);
+  color: #1f2933;
+}
+
+.stagebar-step.is-complete::after {
+  border-left-color: rgba(245, 158, 11, 0.7);
+}
+
+.stagebar-step.is-active {
+  background: linear-gradient(135deg, var(--kinetic-primary), var(--kinetic-primary-dark));
+  color: #1f2933;
+}
+
+.stagebar-step.is-active::after {
+  border-left-color: var(--kinetic-primary-dark);
+}
+
+.stagebar-label {
+  position: relative;
+  z-index: 3;
+}
+
 .stat-label {
   font-size: 0.85rem;
   color: var(--kinetic-muted);
@@ -102,6 +223,17 @@ body.app-shell {
 
 .btn-primary:hover {
   opacity: 0.92;
+}
+
+.btn-outline-light {
+  border-color: var(--kinetic-border);
+  color: var(--kinetic-ink);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.btn-outline-light:hover {
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(239, 68, 68, 0.25);
 }
 
 .dashboard-side {
@@ -140,12 +272,21 @@ body.app-shell {
   border-radius: 12px;
   padding: 10px 12px;
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .dashboard-nav .nav-link.active {
   background: rgba(245, 158, 11, 0.15);
   color: var(--kinetic-primary-dark);
   font-weight: 600;
+}
+
+.dashboard-nav .nav-link i {
+  font-size: 1rem;
+  width: 18px;
+  text-align: center;
 }
 
 .dashboard-nav .nav-link:hover {
@@ -156,6 +297,33 @@ body.app-shell {
   display: flex;
   flex-direction: column;
   gap: 24px;
+}
+
+.app-footer {
+  margin-top: auto;
+  padding: 20px 0 28px;
+  color: var(--kinetic-muted);
+  font-size: 0.9rem;
+}
+
+.app-footer .container {
+  text-align: center;
+}
+
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--kinetic-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.editor-textarea {
+  min-height: 180px;
+  font-family: "Space Grotesk", system-ui, sans-serif;
 }
 
 .graph-placeholder {

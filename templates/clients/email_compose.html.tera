@@ -1,0 +1,87 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">{{ title }}</h2>
+        {% if contact %}
+          <p class="text-muted mb-0">Send an email to {{ contact.name }} at {{ contact.email }}.</p>
+        {% else %}
+          <p class="text-muted mb-0">Send an email to {{ client.company_name }} and copy all contacts.</p>
+        {% endif %}
+      </div>
+      <a class="btn btn-outline-light" href="{{ cancel_url }}">Back</a>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card glass-card p-4">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <div class="mb-3">
+            <label class="form-label">To</label>
+            <div class="form-control-plaintext">{{ to_email }}</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">CC</label>
+            <div class="form-control-plaintext">{{ cc_emails }}</div>
+          </div>
+          <form method="post" action="{{ action_url }}">
+            <div class="mb-3">
+              <label class="form-label">Subject</label>
+              <input class="form-control" name="subject" value="{{ form.subject }}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">HTML body</label>
+              <div class="editor-toolbar" role="toolbar" aria-label="Email editor">
+                <button class="btn btn-sm btn-outline-light" type="button" data-tag="strong"><i class="bi bi-type-bold"></i></button>
+                <button class="btn btn-sm btn-outline-light" type="button" data-tag="em"><i class="bi bi-type-italic"></i></button>
+                <button class="btn btn-sm btn-outline-light" type="button" data-tag="u"><i class="bi bi-type-underline"></i></button>
+                <button class="btn btn-sm btn-outline-light" type="button" data-tag="a"><i class="bi bi-link-45deg"></i></button>
+                <button class="btn btn-sm btn-outline-light" type="button" data-tag="ul"><i class="bi bi-list-ul"></i></button>
+                <button class="btn btn-sm btn-outline-light" type="button" data-tag="p"><i class="bi bi-paragraph"></i></button>
+              </div>
+              <textarea class="form-control editor-textarea" name="body" rows="8" required>{{ form.body }}</textarea>
+              <div class="form-text">Paste valid HTML markup for the email body.</div>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Send email</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const toolbar = document.querySelector(".editor-toolbar");
+      const textarea = document.querySelector(".editor-textarea");
+      if (!toolbar || !textarea) return;
+
+      const wrapSelection = (before, after) => {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const value = textarea.value;
+        textarea.value = value.slice(0, start) + before + value.slice(start, end) + after + value.slice(end);
+        textarea.focus();
+        textarea.selectionStart = start + before.length;
+        textarea.selectionEnd = end + before.length;
+      };
+
+      toolbar.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-tag]");
+        if (!button) return;
+        const tag = button.dataset.tag;
+        if (tag === "a") {
+          wrapSelection('<a href="https://">', "</a>");
+          return;
+        }
+        if (tag === "ul") {
+          wrapSelection("<ul>\n  <li>", "</li>\n</ul>");
+          return;
+        }
+        wrapSelection(`<${tag}>`, `</${tag}>`);
+      });
+    })();
+  </script>
+{% endblock content %}

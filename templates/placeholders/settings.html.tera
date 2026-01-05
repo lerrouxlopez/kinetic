@@ -1,0 +1,186 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="card glass-card p-4">
+      <h2 class="h4 fw-bold">Settings</h2>
+      <p class="text-muted">Configure workspace email delivery for contact outreach.</p>
+      {% if error %}
+        <div class="alert alert-danger mt-3">{{ error }}</div>
+      {% endif %}
+      <form class="mt-4" method="post" action="/{{ current_user.tenant_slug }}/settings/email">
+        <div class="mb-3">
+          <label class="form-label">Email provider</label>
+          <select class="form-select" name="email_provider" required>
+            {% for provider in email_provider_options %}
+              <option value="{{ provider }}" {% if email_form.email_provider == provider %}selected{% endif %}>
+                {{ provider }}
+              </option>
+            {% endfor %}
+          </select>
+          <div class="form-text">Default provider is Mailtrap.</div>
+        </div>
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">From name</label>
+            <input class="form-control" name="from_name" value="{{ email_form.from_name }}" placeholder="Kinetic Team">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">From address</label>
+            <input class="form-control" name="from_address" value="{{ email_form.from_address }}" placeholder="team@company.com" required>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="Mailtrap">
+          <h3 class="h6 fw-semibold">Mailtrap (SMTP)</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SMTP host</label>
+              <input class="form-control" name="smtp_host" value="{{ email_form.smtp_host }}" placeholder="smtp.mailtrap.io">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">SMTP port</label>
+              <input class="form-control" name="smtp_port" value="{{ email_form.smtp_port }}" placeholder="587">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Encryption</label>
+              <select class="form-select" name="smtp_encryption">
+                <option value="" {% if email_form.smtp_encryption == "" %}selected{% endif %}>None</option>
+                <option value="STARTTLS" {% if email_form.smtp_encryption == "STARTTLS" %}selected{% endif %}>STARTTLS</option>
+                <option value="SSL/TLS" {% if email_form.smtp_encryption == "SSL/TLS" %}selected{% endif %}>SSL/TLS</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SMTP username</label>
+              <input class="form-control" name="smtp_username" value="{{ email_form.smtp_username }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SMTP password</label>
+              <input class="form-control" type="password" name="smtp_password" value="{{ email_form.smtp_password }}">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="SMTP">
+          <h3 class="h6 fw-semibold">SMTP</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">SMTP host</label>
+              <input class="form-control" name="smtp_host" value="{{ email_form.smtp_host }}" placeholder="smtp.provider.com">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">SMTP port</label>
+              <input class="form-control" name="smtp_port" value="{{ email_form.smtp_port }}" placeholder="587">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Encryption</label>
+              <select class="form-select" name="smtp_encryption">
+                <option value="" {% if email_form.smtp_encryption == "" %}selected{% endif %}>None</option>
+                <option value="STARTTLS" {% if email_form.smtp_encryption == "STARTTLS" %}selected{% endif %}>STARTTLS</option>
+                <option value="SSL/TLS" {% if email_form.smtp_encryption == "SSL/TLS" %}selected{% endif %}>SSL/TLS</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SMTP username</label>
+              <input class="form-control" name="smtp_username" value="{{ email_form.smtp_username }}">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">SMTP password</label>
+              <input class="form-control" type="password" name="smtp_password" value="{{ email_form.smtp_password }}">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="Amazon SES (Simple Email Service)">
+          <h3 class="h6 fw-semibold">Amazon SES</h3>
+          <div class="row g-3">
+            <div class="col-md-4">
+              <label class="form-label">Access key</label>
+              <input class="form-control" name="ses_access_key" value="{{ email_form.ses_access_key }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Secret key</label>
+              <input class="form-control" type="password" name="ses_secret_key" value="{{ email_form.ses_secret_key }}">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label">Region</label>
+              <input class="form-control" name="ses_region" value="{{ email_form.ses_region }}" placeholder="us-east-1">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="Mailgun">
+          <h3 class="h6 fw-semibold">Mailgun</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Domain</label>
+              <input class="form-control" name="mailgun_domain" value="{{ email_form.mailgun_domain }}" placeholder="mg.example.com">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">API key</label>
+              <input class="form-control" type="password" name="mailgun_api_key" value="{{ email_form.mailgun_api_key }}">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="Postmark">
+          <h3 class="h6 fw-semibold">Postmark</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Server token</label>
+              <input class="form-control" type="password" name="postmark_server_token" value="{{ email_form.postmark_server_token }}">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="Resend">
+          <h3 class="h6 fw-semibold">Resend</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">API key</label>
+              <input class="form-control" type="password" name="resend_api_key" value="{{ email_form.resend_api_key }}">
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-4 provider-section" data-provider="Sendmail">
+          <h3 class="h6 fw-semibold">Sendmail</h3>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label">Sendmail path</label>
+              <input class="form-control" name="sendmail_path" value="{{ email_form.sendmail_path }}" placeholder="/usr/sbin/sendmail">
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-primary mt-4" type="submit">Save email settings</button>
+      </form>
+
+      <div class="mt-4 pt-4 border-top">
+        <h3 class="h6 fw-semibold">Demo data</h3>
+        <p class="text-muted">Seed 50 clients, 50 contacts, and 50 appointments for this workspace.</p>
+        <form method="post" action="/{{ current_user.tenant_slug }}/settings/seed-demo">
+          <button class="btn btn-outline-primary" type="submit">Seed demo data</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const providerSelect = document.querySelector('select[name="email_provider"]');
+      const sections = document.querySelectorAll(".provider-section");
+
+      const refreshSections = () => {
+        const value = providerSelect ? providerSelect.value : "";
+        sections.forEach((section) => {
+          section.style.display = section.dataset.provider === value ? "block" : "none";
+        });
+      };
+
+      if (providerSelect) {
+        providerSelect.addEventListener("change", refreshSections);
+      }
+      refreshSections();
+    })();
+  </script>
+{% endblock content %}

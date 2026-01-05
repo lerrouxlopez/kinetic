@@ -3,9 +3,46 @@ use rocket::http::{Cookie, CookieJar};
 use rocket::response::Redirect;
 use rocket_dyn_templates::{context, Template};
 
-use crate::models::{AdminLoginForm, AdminLoginView, WorkspaceForm, WorkspaceFormView};
+use crate::models::{AdminLoginForm, AdminLoginView, PaginationView, WorkspaceForm, WorkspaceFormView};
 use crate::services::{admin_service, workspace_service};
 use crate::Db;
+
+const PER_PAGE: usize = 10;
+
+fn normalize_page(page: Option<usize>) -> usize {
+    page.unwrap_or(1).max(1)
+}
+
+fn pagination_view(
+    page: usize,
+    total_count: i64,
+    build_url: impl Fn(usize) -> String,
+) -> PaginationView {
+    let per_page = PER_PAGE as i64;
+    let total_pages = ((total_count + per_page - 1) / per_page).max(1) as usize;
+    let page = page.min(total_pages).max(1);
+    let has_prev = page > 1;
+    let has_next = page < total_pages;
+    let prev_url = if has_prev {
+        build_url(page - 1)
+    } else {
+        build_url(1)
+    };
+    let next_url = if has_next {
+        build_url(page + 1)
+    } else {
+        build_url(total_pages)
+    };
+
+    PaginationView {
+        page,
+        total_pages,
+        has_prev,
+        has_next,
+        prev_url,
+        next_url,
+    }
+}
 
 async fn admin_from_cookies(
     cookies: &CookieJar<'_>,
@@ -49,7 +86,9 @@ pub async fn admin_login_submit(
                     .path("/")
                     .build(),
             );
-            Ok(Redirect::to(uri!(admin_workspaces)))
+            Ok(Redirect::to(uri!(admin_workspaces(
+                page = Option::<usize>::None
+            ))))
         }
         Err(err) => Err(Template::render(
             "admin/login",
@@ -68,19 +107,26 @@ pub fn admin_logout(cookies: &CookieJar<'_>) -> Redirect {
     Redirect::to(uri!(admin_login_form))
 }
 
-#[get("/admin/workspaces")]
+#[get("/admin/workspaces?<page>")]
 pub async fn admin_workspaces(
     cookies: &CookieJar<'_>,
     db: &Db,
+    page: Option<usize>,
 ) -> Result<Template, Redirect> {
     let admin = match admin_from_cookies(cookies, db).await {
         Some(admin) => admin,
         None => return Err(Redirect::to(uri!(admin_login_form))),
     };
 
-    let workspaces = workspace_service::list_workspaces(db)
+    let page = normalize_page(page);
+    let offset = ((page - 1) * PER_PAGE) as i64;
+    let workspaces = workspace_service::list_workspaces_paged(db, PER_PAGE as i64, offset)
         .await
         .unwrap_or_default();
+    let total_workspaces = workspace_service::count_workspaces(db).await.unwrap_or(0);
+    let pagination = pagination_view(page, total_workspaces, |target_page| {
+        format!("/admin/workspaces?page={}", target_page)
+    });
 
     Ok(Template::render(
         "admin/workspaces",
@@ -88,6 +134,7 @@ pub async fn admin_workspaces(
             title: "Workspaces",
             admin_email: admin.email,
             workspaces: workspaces,
+            pagination: pagination,
         },
     ))
 }
@@ -125,7 +172,9 @@ pub async fn admin_workspace_create(
     };
     let form = form.into_inner();
     match workspace_service::create_workspace(db, form.slug, form.name).await {
-        Ok(_) => Ok(Redirect::to(uri!(admin_workspaces))),
+        Ok(_) => Ok(Redirect::to(uri!(admin_workspaces(
+            page = Option::<usize>::None
+        )))),
         Err(err) => Err(Template::render(
             "admin/workspace_new",
             context! {
@@ -158,6 +207,9 @@ pub async fn admin_workspace_edit_form(
                     title: "Workspaces",
                     admin_email: admin.email,
                     workspaces: Vec::<crate::models::Workspace>::new(),
+                    pagination: pagination_view(1, 0, |target_page| {
+                        format!("/admin/workspaces?page={}", target_page)
+                    }),
                     error: "Workspace not found.".to_string(),
                 },
             ))
@@ -189,7 +241,9 @@ pub async fn admin_workspace_update(
     };
     let form = form.into_inner();
     match workspace_service::update_workspace(db, id, form.slug, form.name).await {
-        Ok(_) => Ok(Redirect::to(uri!(admin_workspaces))),
+        Ok(_) => Ok(Redirect::to(uri!(admin_workspaces(
+            page = Option::<usize>::None
+        )))),
         Err(err) => Err(Template::render(
             "admin/workspace_edit",
             context! {
@@ -221,10 +275,15 @@ pub async fn admin_workspace_delete(
                 title: "Workspaces",
                 admin_email: admin.email,
                 workspaces: Vec::<crate::models::Workspace>::new(),
+                pagination: pagination_view(1, 0, |target_page| {
+                    format!("/admin/workspaces?page={}", target_page)
+                }),
                 error: message,
             },
         ));
     }
 
-    Ok(Redirect::to(uri!(admin_workspaces)))
+    Ok(Redirect::to(uri!(admin_workspaces(
+        page = Option::<usize>::None
+    ))))
 }

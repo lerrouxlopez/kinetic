@@ -10,10 +10,34 @@
           <p class="text-muted small mb-0">Signed in as {{ email }}</p>
         </div>
         <nav class="nav flex-column mt-4">
-          <a class="nav-link active" href="#">Dashboard</a>
-          <a class="nav-link" href="#">Settings</a>
-          <a class="nav-link" href="/crew">Crew roster</a>
-          <a class="nav-link" href="#">Clients</a>
+          <a class="nav-link active" href="/{{ tenant_slug }}/dashboard">
+            <i class="bi bi-speedometer2"></i>
+            Dashboard
+          </a>
+          <a class="nav-link" href="/{{ tenant_slug }}/clients">
+            <i class="bi bi-building"></i>
+            Clients
+          </a>
+          <a class="nav-link" href="/{{ tenant_slug }}/crew">
+            <i class="bi bi-people"></i>
+            Roster
+          </a>
+          <a class="nav-link" href="/{{ tenant_slug }}/deployments">
+            <i class="bi bi-diagram-3"></i>
+            Deployments
+          </a>
+          <a class="nav-link" href="/{{ tenant_slug }}/tracking">
+            <i class="bi bi-geo"></i>
+            Tracking
+          </a>
+          <a class="nav-link" href="/{{ tenant_slug }}/invoices">
+            <i class="bi bi-receipt"></i>
+            Invoices
+          </a>
+          <a class="nav-link" href="/{{ tenant_slug }}/settings">
+            <i class="bi bi-gear"></i>
+            Settings
+          </a>
         </nav>
       </aside>
       <section class="dashboard-main">

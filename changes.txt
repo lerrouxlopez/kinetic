@@ -1,0 +1,153 @@
+changes:
+---
+in the dashboard: -> done
+- create a side menu
+   - settings
+   - crew roster
+   - clients
+- the main dashboard page should show:
+ 	- statistics
+ 	- graphs
+---
+notes: use all 80-90% of the page width -> done
+
+crew roster page:
+ - table showing crews
+ - CRUD
+ - statistics
+---
+Change the Kinetic text logo font to Futura / Avenir (Italic) -> done
+
+Add:
+ - Invoices to menu
+ - Tracking to menu
+ - Assets to menu
+---
+
+Clients Page: -> done
+ - table showing clients
+ - CRUD
+ - client fields should have:
+   - company name
+   - address
+   - phone
+   - email address
+   - latitude / longitude
+   - contact (submenu):
+ 	separate table w/ name, address, email, phone
+ 
+---
+
+Add icons to all menu items -> done
+every workspace should have their own URL "/workspace-slug/dashboard" for example
+
+'in the clients page, make the client company name clickable to open a new client profile page with a list of contacts for that client (make it CRUD)
+
+
+---
+DONE
+In the clients page, create the CRUD functionality for contacts
+if a client is deleted, do not delete their contacts and retain them in the database but mark them as "rogues"
+All links inside a workspace should be under the /workspace-slug/ not just the dashboard, adjust this accordingly.
+Adjust the menu order.
+Dashboard
+Clients
+Roster(from Crew Roster)
+Tracking
+Invoices
+Settings
+
+---
+DONE
+Add a new menu item:
+   - Deployments
+Create pages for all menu items, add placeholders for now.
+
+
+
+---
+DONE
+in the client's profile page, add a new feature: Appointments
+the user should be able to see all appointments that were scheduled and
+notes attached to the appointment, add appointment statuses: Scheduled, on going, cancelled.
+Appointments should be attached to contacts
+Remove latitude longitude as a card and add them as details below the number and email address
+add appointments and deployments to replace latitude longitude in the cards
+
+---
+DONE
+in the client page right below the contact info, add a progress bar for different stages of a contact: Proposal > Negotiation > Closed
+In the add/edit client form, add a dropdown to select current stage.
+
+---
+DONE
+setup the email system.
+in the workspace settings, the user should be able to input what email provider to use, gmail, sendgrid, mailtrap, etc. (use mailtrap as default)
+when emails need to be sent anywhere on the workspace, the system should used this setting for the workspace.
+in the contact table in the client page, add a "email" button next to Add appointment that allows user to send an email to that contact.
+in the client page next to edit client, add an email blast button that enables the user to send an email to the client's email address copying all contacts
+make sure all needed function for this mail feature works as expected.
+
+---
+DONE
+email settings:
+Add these default providers that we support for now:
+Mailtrap
+Amazon SES (Simple Email Service)
+Mailgun
+Postmark
+Resend
+Sendmail
+SMTP
+Do a small research on what do each of these providers require for integration and add them to the settings (add fields accordingly)
+
+---
+DONE
+On the HTML Body text area, add text editing toolbar like the ones that are commonly used.
+Logo background should be transparent (see screenshot)
+Add a footer to the app. "Powered by Kinetic 2026" the add version info
+on email settings. fix spacing on the button (see screenshot).
+
+---
+DONE
+attach "appointments' to contact, the appointment form should answer the questions: to whom? or who am I meeting? what happened during the meeting? or What do I expect to happen during the meeting
+The date and time should be date pickers
+
+---
+DONE
+paginate all tables, add a 10 record limit per page.
+add 2 new fields to a contact> Department and Position.
+
+---
+DONE
+in the crew roster page, make the field "Name" clickable. This should open the crew detail / profile page that shows:
+Name, Status, and a list of "members"
+The user should be able to add members to a crew. The member fields should have: name, phone, email address and position
+member the members have the CRUD functionality just like "contacts" in "clients"
+
+---
+DONE
+The idea behind deployments is that you "deploy" a crew to a client.
+The deployment page should show a list of current deployments grouped by clients. A Client can have multiple crews deployed to them.
+
+so, to create a deployment, a form with fields: start, finish (both date/time fields) deployment information, and status(dropdown) should be filled up.
+
+-- 
+DONE
+add a field to deployment: Fee (its an amount /hour)
+On the list of deployment, a new column (fee) that shows a calculated fee of the deployment derived from the fee/hour vs how many hours (start to finish) Note: a work "day" only has 8 hours. Take this into consideration and make necessary adjustments.
+
+---
+DONE
+the fee / hour in deployments is money so it should have a currency. 
+The currency is set per client. so, add a currency field for the client (dropdown, pre-filled with all know currency) and display the currency in every where money is show. 
+in deployments for example, the fee column should have 1 USD if the currency is in USD for the client.
+
+--
+
+The tracking page is used to track deployments.
+Here, the user can add updates and hours worked is calculated automatically
+when the user inputs the time started and finished.
+an update is required per work day.
+
+a user should be able to choose which deployment to show (dropdown, showing company, team very short summary) and see a list of updates for the deployment as well as a simple graph above the list to plot out the hours worked per day for the deployment.

@@ -1,0 +1,176 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex flex-column flex-lg-row align-items-start justify-content-between gap-3 mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">{{ client.company_name }}</h2>
+        <p class="text-muted mb-0">{{ client.address }}</p>
+        <p class="text-muted small mb-0">{{ client.phone }} · {{ client.email }}</p>
+        <p class="text-muted small mb-0">Lat {{ client.latitude }} · Long {{ client.longitude }}</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients">Back to clients</a>
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/email-blast">Email blast</a>
+        <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/edit">Edit client</a>
+      </div>
+    </div>
+
+    <div class="card glass-card p-3 mb-4">
+      <div class="stagebar">
+        <div class="stagebar-step {% if client.stage == "Proposal" %}is-active{% elif client.stage == "Negotiation" or client.stage == "Closed" %}is-complete{% endif %}">
+          <span class="stagebar-label">Proposal</span>
+        </div>
+        <div class="stagebar-step {% if client.stage == "Negotiation" %}is-active{% elif client.stage == "Closed" %}is-complete{% endif %}">
+          <span class="stagebar-label">Negotiation</span>
+        </div>
+        <div class="stagebar-step {% if client.stage == "Closed" %}is-active{% endif %}">
+          <span class="stagebar-label">Closed</span>
+        </div>
+      </div>
+    </div>
+
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="card glass-card p-4 mb-4">
+      <div class="row g-3">
+        <div class="col-md-4">
+            <div class="stat-tile">
+              <div class="stat-label">Contacts</div>
+              <div class="stat-value">{{ contacts_count }}</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+          <div class="stat-tile">
+            <div class="stat-label">Appointments</div>
+            <div class="stat-value">{{ appointments_count }}</div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="stat-tile">
+            <div class="stat-label">Deployments</div>
+            <div class="stat-value">{{ deployments_count }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <h3 class="h5 fw-semibold mb-0">Contacts</h3>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/new">Add contact</a>
+    </div>
+    <div class="card glass-card p-3">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Address</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Department</th>
+              <th>Position</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for contact in contacts %}
+              <tr>
+                <td>{{ contact.name }}</td>
+                <td class="text-muted">{{ contact.address }}</td>
+                <td>{{ contact.email }}</td>
+                <td>{{ contact.phone }}</td>
+                <td>{{ contact.department }}</td>
+                <td>{{ contact.position }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/appointments/new">Add appointment</a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/email">Email</a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/edit">Edit</a>
+                  <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/delete">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="7" class="text-center text-muted py-4">No contacts yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% if contacts_pagination is defined and contacts_pagination.total_pages > 1 %}
+      <div class="d-flex align-items-center justify-content-between mt-3">
+        <div class="text-muted small">Page {{ contacts_pagination.page }} of {{ contacts_pagination.total_pages }}</div>
+        <nav aria-label="Contacts pagination">
+          <ul class="pagination mb-0">
+            <li class="page-item {% if not contacts_pagination.has_prev %}disabled{% endif %}">
+              <a class="page-link" href="{{ contacts_pagination.prev_url }}">Previous</a>
+            </li>
+            <li class="page-item {% if not contacts_pagination.has_next %}disabled{% endif %}">
+              <a class="page-link" href="{{ contacts_pagination.next_url }}">Next</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+    <div class="d-flex align-items-center justify-content-between mt-5 mb-3">
+      <h3 class="h5 fw-semibold mb-0">Appointments</h3>
+    </div>
+    <div class="card glass-card p-3">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Title</th>
+              <th>Contact</th>
+              <th>Scheduled</th>
+              <th>Status</th>
+              <th>Notes</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for appointment in appointments %}
+              <tr>
+                <td>{{ appointment.title }}</td>
+                <td>{{ appointment.contact_name }}</td>
+                <td>{{ appointment.scheduled_for }}</td>
+                <td><span class="badge crew-badge">{{ appointment.status }}</span></td>
+                <td class="text-muted">{{ appointment.notes }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/edit">Edit</a>
+                  <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/delete">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="6" class="text-center text-muted py-4">No appointments yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% if appointments_pagination is defined and appointments_pagination.total_pages > 1 %}
+      <div class="d-flex align-items-center justify-content-between mt-3">
+        <div class="text-muted small">Page {{ appointments_pagination.page }} of {{ appointments_pagination.total_pages }}</div>
+        <nav aria-label="Appointments pagination">
+          <ul class="pagination mb-0">
+            <li class="page-item {% if not appointments_pagination.has_prev %}disabled{% endif %}">
+              <a class="page-link" href="{{ appointments_pagination.prev_url }}">Previous</a>
+            </li>
+            <li class="page-item {% if not appointments_pagination.has_next %}disabled{% endif %}">
+              <a class="page-link" href="{{ appointments_pagination.next_url }}">Next</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+{% endblock content %}

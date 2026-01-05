@@ -1,0 +1,77 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">Edit deployment</h2>
+        <p class="text-muted mb-0">Update the crew deployment details.</p>
+      </div>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/deployments">Back</a>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-7">
+        <div class="card glass-card p-4">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/{{ current_user.tenant_slug }}/deployments/{{ deployment_id }}">
+            <div class="mb-3">
+              <label class="form-label">Client</label>
+              <select class="form-select" name="client_id" required>
+                <option value="0">Select a client</option>
+                {% for client in clients %}
+                  <option value="{{ client.id }}" {% if form.client_id == client.id %}selected{% endif %}>
+                    {{ client.company_name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Crew</label>
+              <select class="form-select" name="crew_id" required>
+                <option value="0">Select a crew</option>
+                {% for crew in crews %}
+                  <option value="{{ crew.id }}" {% if form.crew_id == crew.id %}selected{% endif %}>
+                    {{ crew.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Start</label>
+                <input class="form-control" type="datetime-local" name="start_at" value="{{ form.start_at }}" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Finish</label>
+                <input class="form-control" type="datetime-local" name="end_at" value="{{ form.end_at }}" required>
+              </div>
+            </div>
+            <div class="mb-3 mt-3">
+              <label class="form-label">Fee (per hour)</label>
+              <input class="form-control" type="number" name="fee_per_hour" step="0.01" min="0" value="{{ form.fee_per_hour }}" required>
+              <div class="form-text">Currency is set on the client profile.</div>
+            </div>
+            <div class="mb-3 mt-3">
+              <label class="form-label">Deployment information</label>
+              <textarea class="form-control" name="info" rows="4" required>{{ form.info }}</textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status" required>
+                {% for status in status_options %}
+                  <option value="{{ status }}" {% if form.status == status %}selected{% endif %}>
+                    {{ status }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-primary w-100 mt-3" type="submit">Save changes</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock content %}

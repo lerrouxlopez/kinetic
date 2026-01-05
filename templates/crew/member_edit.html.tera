@@ -1,0 +1,44 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">Edit member</h2>
+        <p class="text-muted mb-0">Update details for {{ crew.name }}.</p>
+      </div>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/profile">Back</a>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-7">
+        <div class="card glass-card p-4">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/{{ member_id }}">
+            <div class="mb-3">
+              <label class="form-label">Name</label>
+              <input class="form-control" name="name" value="{{ form.name }}" required>
+            </div>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Email</label>
+                <input class="form-control" type="email" name="email" value="{{ form.email }}" required>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label">Phone</label>
+                <input class="form-control" name="phone" value="{{ form.phone }}" required>
+              </div>
+            </div>
+            <div class="mb-3 mt-3">
+              <label class="form-label">Position</label>
+              <input class="form-control" name="position" value="{{ form.position }}" required>
+            </div>
+            <button class="btn btn-primary w-100 mt-4" type="submit">Save changes</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock content %}

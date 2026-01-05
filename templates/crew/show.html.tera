@@ -1,0 +1,93 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex flex-column flex-lg-row align-items-start justify-content-between gap-3 mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">{{ crew.name }}</h2>
+        <p class="text-muted mb-0">Crew profile and member roster.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/crew">Back to roster</a>
+        <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/new">Add member</a>
+      </div>
+    </div>
+
+    {% if error %}
+      <div class="alert alert-danger">{{ error }}</div>
+    {% endif %}
+
+    <div class="card glass-card p-4 mb-4">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="text-muted text-uppercase small">Name</div>
+          <div class="fw-semibold">{{ crew.name }}</div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted text-uppercase small">Status</div>
+          <div><span class="badge crew-badge">{{ crew.status }}</span></div>
+        </div>
+        <div class="col-md-3">
+          <div class="text-muted text-uppercase small">Members</div>
+          <div class="fw-semibold">{{ members_count }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card glass-card p-3">
+      <div class="d-flex align-items-center justify-content-between mb-3 px-2">
+        <h3 class="h6 fw-semibold mb-0">Members</h3>
+        <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/new">Add member</a>
+      </div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Position</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for member in members %}
+              <tr>
+                <td>{{ member.name }}</td>
+                <td>{{ member.position }}</td>
+                <td>{{ member.email }}</td>
+                <td>{{ member.phone }}</td>
+                <td class="text-end">
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/{{ member.id }}/edit">Edit</a>
+                  <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/{{ member.id }}/delete">
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            {% else %}
+              <tr>
+                <td colspan="5" class="text-center text-muted py-4">No members yet.</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if members_pagination is defined and members_pagination.total_pages > 1 %}
+      <div class="d-flex align-items-center justify-content-between mt-3">
+        <div class="text-muted small">Page {{ members_pagination.page }} of {{ members_pagination.total_pages }}</div>
+        <nav aria-label="Member pagination">
+          <ul class="pagination mb-0">
+            <li class="page-item {% if not members_pagination.has_prev %}disabled{% endif %}">
+              <a class="page-link" href="{{ members_pagination.prev_url }}">Previous</a>
+            </li>
+            <li class="page-item {% if not members_pagination.has_next %}disabled{% endif %}">
+              <a class="page-link" href="{{ members_pagination.next_url }}">Next</a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+{% endblock content %}

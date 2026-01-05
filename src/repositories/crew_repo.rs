@@ -23,6 +23,41 @@ pub async fn list_crews(db: &Db, tenant_id: i64) -> Result<Vec<Crew>, sqlx::Erro
         .collect())
 }
 
+pub async fn list_crews_paged(
+    db: &Db,
+    tenant_id: i64,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Crew>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, tenant_id, name, members_count, status FROM crews WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+    )
+    .bind(tenant_id)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Crew {
+            id: row.get("id"),
+            tenant_id: row.get("tenant_id"),
+            name: row.get("name"),
+            members_count: row.get("members_count"),
+            status: row.get("status"),
+        })
+        .collect())
+}
+
+pub async fn count_crews(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM crews WHERE tenant_id = ?")
+        .bind(tenant_id)
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn find_crew_by_id(
     db: &Db,
     tenant_id: i64,
@@ -78,6 +113,27 @@ pub async fn update_crew(
     .bind(name)
     .bind(members_count)
     .bind(status)
+    .bind(crew_id)
+    .bind(tenant_id)
+    .execute(&db.0)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_members_count(db: &Db, tenant_id: i64, crew_id: i64) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE crews
+        SET members_count = (
+            SELECT COUNT(*)
+            FROM crew_members
+            WHERE crew_id = ? AND tenant_id = ?
+        )
+        WHERE id = ? AND tenant_id = ?
+        "#,
+    )
+    .bind(crew_id)
+    .bind(tenant_id)
     .bind(crew_id)
     .bind(tenant_id)
     .execute(&db.0)

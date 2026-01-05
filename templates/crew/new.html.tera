@@ -7,7 +7,7 @@
         <h2 class="h4 fw-bold mb-1">New crew</h2>
         <p class="text-muted mb-0">Create a team and assign its status.</p>
       </div>
-      <a class="btn btn-outline-light" href="/crew">Back</a>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/crew">Back</a>
     </div>
 
     <div class="row justify-content-center">
@@ -16,7 +16,7 @@
           {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
           {% endif %}
-          <form method="post" action="/crew">
+          <form method="post" action="/{{ current_user.tenant_slug }}/crew">
             <div class="mb-3">
               <label class="form-label">Crew name</label>
               <input class="form-control" name="name" value="{{ form.name }}" placeholder="Northline Alpha" required>

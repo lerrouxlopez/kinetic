@@ -1,0 +1,73 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">Edit appointment</h2>
+        <p class="text-muted mb-0">Update appointment details for {{ client.company_name }}.</p>
+      </div>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/profile">Back</a>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card glass-card p-4">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment_id }}">
+            <div class="mb-3">
+              <label class="form-label">Who am I meeting?</label>
+              <input class="form-control" value="{{ contact_name }}" readonly>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">What do you expect to happen during the meeting?</label>
+              <input class="form-control" name="title" value="{{ form.title }}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Meeting date</label>
+              <input class="form-control" type="date" name="scheduled_date" value="{{ scheduled_date }}" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Meeting time</label>
+              <input class="form-control" type="time" name="scheduled_time" value="{{ scheduled_time }}" required>
+            </div>
+            <input type="hidden" name="scheduled_for" value="{{ form.scheduled_for }}">
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status">
+                {% for option in status_options %}
+                  <option value="{{ option }}" {% if form.status == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-4">
+              <label class="form-label">What happened during the meeting?</label>
+              <textarea class="form-control" name="notes" rows="4">{{ form.notes }}</textarea>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Save appointment</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (() => {
+      const dateInput = document.querySelector('input[name="scheduled_date"]');
+      const timeInput = document.querySelector('input[name="scheduled_time"]');
+      const hiddenInput = document.querySelector('input[name="scheduled_for"]');
+      if (!dateInput || !timeInput || !hiddenInput) return;
+
+      const syncHidden = () => {
+        const dateValue = dateInput.value;
+        const timeValue = timeInput.value;
+        hiddenInput.value = dateValue && timeValue ? `${dateValue} ${timeValue}` : "";
+      };
+
+      dateInput.addEventListener("change", syncHidden);
+      timeInput.addEventListener("change", syncHidden);
+      syncHidden();
+    })();
+  </script>
+{% endblock content %}
