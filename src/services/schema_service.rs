@@ -8,13 +8,17 @@ use crate::Db;
 pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        CREATE TABLE IF NOT EXISTS tenants (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            slug TEXT NOT NULL UNIQUE,
-            name TEXT NOT NULL,
-            email_provider TEXT NOT NULL DEFAULT 'Mailtrap',
-            email_from_name TEXT NOT NULL DEFAULT '',
-            email_from_address TEXT NOT NULL DEFAULT '',
+          CREATE TABLE IF NOT EXISTS tenants (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              slug TEXT NOT NULL UNIQUE,
+              name TEXT NOT NULL,
+              app_name TEXT NOT NULL DEFAULT 'Kinetic',
+              logo_path TEXT NOT NULL DEFAULT '',
+              theme_key TEXT NOT NULL DEFAULT 'kinetic',
+              background_hue INTEGER NOT NULL DEFAULT 32,
+              email_provider TEXT NOT NULL DEFAULT 'Mailtrap',
+              email_from_name TEXT NOT NULL DEFAULT '',
+              email_from_address TEXT NOT NULL DEFAULT '',
             smtp_host TEXT NOT NULL DEFAULT '',
             smtp_port TEXT NOT NULL DEFAULT '',
             smtp_username TEXT NOT NULL DEFAULT '',
@@ -369,11 +373,31 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             .execute(&db.0)
             .await,
     );
-    ignore_duplicate_column(
-        sqlx::query("ALTER TABLE tenants ADD COLUMN sendmail_path TEXT NOT NULL DEFAULT ''")
-            .execute(&db.0)
-            .await,
-    );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE tenants ADD COLUMN sendmail_path TEXT NOT NULL DEFAULT ''")
+              .execute(&db.0)
+              .await,
+      );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE tenants ADD COLUMN app_name TEXT NOT NULL DEFAULT 'Kinetic'")
+              .execute(&db.0)
+              .await,
+      );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE tenants ADD COLUMN logo_path TEXT NOT NULL DEFAULT ''")
+              .execute(&db.0)
+              .await,
+      );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE tenants ADD COLUMN theme_key TEXT NOT NULL DEFAULT 'kinetic'")
+              .execute(&db.0)
+              .await,
+      );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE tenants ADD COLUMN background_hue INTEGER NOT NULL DEFAULT 32")
+              .execute(&db.0)
+              .await,
+      );
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE client_contacts ADD COLUMN is_rogue INTEGER NOT NULL DEFAULT 0")
             .execute(&db.0)

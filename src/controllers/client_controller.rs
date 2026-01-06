@@ -15,7 +15,7 @@ use crate::models::{
     EmailFormView,
     PaginationView,
 };
-use crate::services::{access_service, appointment_service, auth_service, client_service, email_service};
+use crate::services::{access_service, appointment_service, auth_service, client_service, email_service, workspace_service};
 use crate::Db;
 
 const PER_PAGE: usize = 10;
@@ -113,6 +113,15 @@ async fn tenant_from_cookies(
     }
 }
 
+async fn workspace_brand(db: &Db, tenant_id: i64) -> crate::models::WorkspaceBrandView {
+    workspace_service::find_workspace_by_id(db, tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace_service::workspace_brand_view(&workspace))
+        .unwrap_or_else(workspace_service::default_workspace_brand_view)
+}
+
 #[get("/<slug>/clients?<page>")]
 pub async fn clients_index(
     cookies: &CookieJar<'_>,
@@ -153,6 +162,7 @@ pub async fn clients_index(
         context! {
             title: "Clients",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             clients: clients,
             pagination: pagination,
         },
@@ -185,6 +195,7 @@ pub async fn client_new_form(
         context! {
             title: "New client",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             form: ClientFormView::new("", "", "", "", "", "", "Proposal", "USD"),
             stage_options: client_service::client_stage_options(),
@@ -228,6 +239,7 @@ pub async fn client_create(
             context! {
                 title: "New client",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 form: err.form,
                 stage_options: client_service::client_stage_options(),
@@ -274,6 +286,7 @@ pub async fn client_show(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -331,6 +344,7 @@ pub async fn client_show(
         context! {
             title: "Client details",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client,
             contacts: contacts,
             contacts_count: contacts_count,
@@ -378,6 +392,7 @@ pub async fn client_edit_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -390,6 +405,7 @@ pub async fn client_edit_form(
         context! {
             title: "Edit client",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             client_id: client.id,
             form: ClientFormView::new(
@@ -446,6 +462,7 @@ pub async fn client_update(
             context! {
                 title: "Edit client",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 client_id: id,
                 form: err.form,
@@ -487,6 +504,7 @@ pub async fn client_delete(
             context! {
                 title: "Clients",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 clients: Vec::<crate::models::Client>::new(),
                 error: message,
             },
@@ -534,6 +552,7 @@ pub async fn contact_new_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -546,6 +565,7 @@ pub async fn contact_new_form(
         context! {
             title: "New contact",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             client: client,
             form: ClientContactFormView::new("", "", "", "", "", ""),
@@ -591,6 +611,7 @@ pub async fn contact_create(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -610,6 +631,7 @@ pub async fn contact_create(
         context! {
             title: "New contact",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: err.message,
             client: client,
             form: err.form,
@@ -655,6 +677,7 @@ pub async fn contact_edit_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -673,6 +696,7 @@ pub async fn contact_edit_form(
                 context! {
                     title: "Client details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
@@ -692,6 +716,7 @@ pub async fn contact_edit_form(
         context! {
             title: "Edit contact",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client,
             error: Option::<String>::None,
             contact_id: contact.id,
@@ -746,6 +771,7 @@ pub async fn contact_update(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -765,6 +791,7 @@ pub async fn contact_update(
         context! {
             title: "Edit contact",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client,
             error: err.message,
             contact_id: contact_id,
@@ -812,6 +839,7 @@ pub async fn contact_delete(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -828,6 +856,7 @@ pub async fn contact_delete(
             context! {
                 title: "Client details",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 client: client,
                 contacts: Vec::<crate::models::ClientContact>::new(),
                 contacts_count: 0,
@@ -886,6 +915,7 @@ pub async fn appointment_new_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -903,6 +933,7 @@ pub async fn appointment_new_form(
                 context! {
                     title: "Client details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
@@ -923,6 +954,7 @@ pub async fn appointment_new_form(
         context! {
             title: "New appointment",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client,
             contact: contact,
             contact_id: contact_id,
@@ -974,6 +1006,7 @@ pub async fn appointment_create(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -991,6 +1024,7 @@ pub async fn appointment_create(
                 context! {
                     title: "Client details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
@@ -1019,6 +1053,7 @@ pub async fn appointment_create(
                 context! {
                     title: "New appointment",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contact: contact,
                     contact_id: contact_id,
@@ -1070,6 +1105,7 @@ pub async fn appointment_edit_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1088,6 +1124,7 @@ pub async fn appointment_edit_form(
                 context! {
                     title: "Client details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     appointments: Vec::<crate::models::Appointment>::new(),
@@ -1109,6 +1146,7 @@ pub async fn appointment_edit_form(
         context! {
             title: "Edit appointment",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client,
             appointment_id: appointment.id,
             contact_name: appointment.contact_name,
@@ -1165,6 +1203,7 @@ pub async fn appointment_update(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1195,6 +1234,7 @@ pub async fn appointment_update(
                 context! {
                     title: "Edit appointment",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     appointment_id: appointment_id,
                     contact_name: contact_name,
@@ -1247,6 +1287,7 @@ pub async fn appointment_delete(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1263,6 +1304,7 @@ pub async fn appointment_delete(
             context! {
                 title: "Client details",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 client: client,
                 contacts: Vec::<crate::models::ClientContact>::new(),
                 appointments: Vec::<crate::models::Appointment>::new(),
@@ -1321,6 +1363,7 @@ pub async fn contact_email_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1338,6 +1381,7 @@ pub async fn contact_email_form(
                 context! {
                     title: "Client details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
@@ -1357,6 +1401,7 @@ pub async fn contact_email_form(
         context! {
             title: "Email contact",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client,
             contact: contact.clone(),
             to_email: contact.email.clone(),
@@ -1408,6 +1453,7 @@ pub async fn contact_email_send(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1425,6 +1471,7 @@ pub async fn contact_email_send(
                 context! {
                     title: "Client details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
@@ -1462,6 +1509,7 @@ pub async fn contact_email_send(
             context! {
                 title: "Email contact",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 client: client,
                 contact: contact.clone(),
                 to_email: contact.email.clone(),
@@ -1510,6 +1558,7 @@ pub async fn client_email_blast_form(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1537,6 +1586,7 @@ pub async fn client_email_blast_form(
         context! {
             title: "Email blast",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client.clone(),
             contact: Option::<crate::models::ClientContact>::None,
             to_email: client.email.clone(),
@@ -1587,6 +1637,7 @@ pub async fn client_email_blast_send(
                 context! {
                     title: "Clients",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     clients: Vec::<crate::models::Client>::new(),
                     error: "Client not found.".to_string(),
                 },
@@ -1632,6 +1683,7 @@ pub async fn client_email_blast_send(
             context! {
             title: "Email blast",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             client: client.clone(),
             contact: Option::<crate::models::ClientContact>::None,
             to_email: client.email.clone(),
@@ -1644,3 +1696,5 @@ pub async fn client_email_blast_send(
         )),
     }
 }
+
+

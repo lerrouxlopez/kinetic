@@ -52,14 +52,14 @@
           <svg viewBox="0 0 {{ chart_data.width }} {{ chart_data.height }}" role="img" aria-label="Hours worked by day">
             <defs>
               <linearGradient id="hoursGradient" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.6"></stop>
-                <stop offset="100%" stop-color="#ef4444" stop-opacity="0.08"></stop>
+                <stop offset="0%" stop-color="var(--kinetic-chart-start)" stop-opacity="0.6"></stop>
+                <stop offset="100%" stop-color="var(--kinetic-chart-end)" stop-opacity="0.08"></stop>
               </linearGradient>
             </defs>
             <path d="{{ chart_data.area_path }}" fill="url(#hoursGradient)"></path>
-            <path d="{{ chart_data.path }}" fill="none" stroke="#f59e0b" stroke-width="3"></path>
+            <path d="{{ chart_data.path }}" fill="none" stroke="var(--kinetic-chart-stroke)" stroke-width="3"></path>
             {% for point in chart_data.points %}
-              <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4.5" fill="#ef4444"></circle>
+              <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4.5" fill="var(--kinetic-chart-point)"></circle>
             {% endfor %}
           </svg>
           <div class="tracking-chart-labels">

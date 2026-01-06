@@ -1,6 +1,15 @@
 use rocket_db_pools::sqlx::{self, Row};
 
-use crate::models::{Workspace, WorkspaceEmailSettingsForm, WorkspaceEmailSettingsView, WorkspaceFormView};
+use crate::models::{
+    ThemeOption,
+    Workspace,
+    WorkspaceBrandView,
+    WorkspaceEmailSettingsForm,
+    WorkspaceEmailSettingsView,
+    WorkspaceFormView,
+    WorkspaceThemeForm,
+    WorkspaceThemeView,
+};
 use crate::repositories::tenant_repo;
 use crate::services::utils::normalize_slug;
 use crate::Db;
@@ -15,6 +24,11 @@ pub struct WorkspaceEmailSettingsError {
     pub form: WorkspaceEmailSettingsView,
 }
 
+pub struct WorkspaceThemeError {
+    pub message: String,
+    pub form: WorkspaceThemeView,
+}
+
 pub fn email_provider_options() -> Vec<&'static str> {
     vec![
         "Mailtrap",
@@ -24,6 +38,88 @@ pub fn email_provider_options() -> Vec<&'static str> {
         "Resend",
         "Sendmail",
         "SMTP",
+    ]
+}
+
+pub fn theme_options() -> Vec<ThemeOption> {
+    vec![
+        ThemeOption {
+            key: "kinetic".to_string(),
+            name: "Kinetic Ember".to_string(),
+            primary: "#f59e0b".to_string(),
+            secondary: "#ef4444".to_string(),
+            on_primary: "#111827".to_string(),
+        },
+        ThemeOption {
+            key: "cobalt".to_string(),
+            name: "Cobalt Tide".to_string(),
+            primary: "#2563eb".to_string(),
+            secondary: "#22d3ee".to_string(),
+            on_primary: "#f8fafc".to_string(),
+        },
+        ThemeOption {
+            key: "emerald".to_string(),
+            name: "Emerald Pulse".to_string(),
+            primary: "#10b981".to_string(),
+            secondary: "#34d399".to_string(),
+            on_primary: "#0f172a".to_string(),
+        },
+        ThemeOption {
+            key: "forest".to_string(),
+            name: "Forest Trail".to_string(),
+            primary: "#15803d".to_string(),
+            secondary: "#16a34a".to_string(),
+            on_primary: "#f8fafc".to_string(),
+        },
+        ThemeOption {
+            key: "ocean".to_string(),
+            name: "Ocean Drift".to_string(),
+            primary: "#0ea5e9".to_string(),
+            secondary: "#38bdf8".to_string(),
+            on_primary: "#0f172a".to_string(),
+        },
+        ThemeOption {
+            key: "plum".to_string(),
+            name: "Plum Neon".to_string(),
+            primary: "#a855f7".to_string(),
+            secondary: "#ec4899".to_string(),
+            on_primary: "#f8fafc".to_string(),
+        },
+        ThemeOption {
+            key: "canyon".to_string(),
+            name: "Canyon Heat".to_string(),
+            primary: "#b45309".to_string(),
+            secondary: "#f59e0b".to_string(),
+            on_primary: "#f8fafc".to_string(),
+        },
+        ThemeOption {
+            key: "slate".to_string(),
+            name: "Slate Signal".to_string(),
+            primary: "#475569".to_string(),
+            secondary: "#94a3b8".to_string(),
+            on_primary: "#f8fafc".to_string(),
+        },
+        ThemeOption {
+            key: "sunset".to_string(),
+            name: "Sunset Drive".to_string(),
+            primary: "#f97316".to_string(),
+            secondary: "#f43f5e".to_string(),
+            on_primary: "#111827".to_string(),
+        },
+        ThemeOption {
+            key: "aurora".to_string(),
+            name: "Aurora Mint".to_string(),
+            primary: "#14b8a6".to_string(),
+            secondary: "#22c55e".to_string(),
+            on_primary: "#0f172a".to_string(),
+        },
+        ThemeOption {
+            key: "midnight".to_string(),
+            name: "Midnight Steel".to_string(),
+            primary: "#0f172a".to_string(),
+            secondary: "#64748b".to_string(),
+            on_primary: "#f8fafc".to_string(),
+        },
     ]
 }
 
@@ -312,6 +408,91 @@ pub async fn update_email_settings(
     Ok(())
 }
 
+pub async fn update_theme_settings(
+    db: &Db,
+    id: i64,
+    form: WorkspaceThemeForm<'_>,
+    logo_path: Option<String>,
+) -> Result<(), WorkspaceThemeError> {
+    let existing = find_workspace_by_id(db, id)
+        .await
+        .ok()
+        .flatten()
+        .as_ref()
+        .map(workspace_theme_view)
+        .unwrap_or_else(default_theme_view);
+    let app_name = form
+        .app_name
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let app_name = if app_name.is_empty() {
+        existing.app_name.clone()
+    } else {
+        app_name
+    };
+
+    let theme_key = form
+        .theme_key
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    let theme_key = if theme_key.is_empty() {
+        existing.theme_key.clone()
+    } else {
+        theme_key
+    };
+    if !theme_options()
+        .iter()
+        .any(|option| option.key == theme_key)
+    {
+        return Err(WorkspaceThemeError {
+            message: "Theme selection is invalid.".to_string(),
+            form: WorkspaceThemeView {
+                app_name,
+                logo_url: logo_path.unwrap_or(existing.logo_url),
+                theme_key,
+                background_hue: existing.background_hue,
+            },
+        });
+    }
+
+    let background_hue = form
+        .background_hue
+        .unwrap_or(existing.background_hue)
+        .clamp(0, 360);
+    let current_logo = find_workspace_by_id(db, id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace.logo_path)
+        .unwrap_or_default();
+    let resolved_logo = logo_path.unwrap_or(current_logo);
+
+    if let Err(err) = tenant_repo::update_theme_settings(
+        db,
+        id,
+        &app_name,
+        &theme_key,
+        background_hue,
+        &resolved_logo,
+    )
+    .await
+    {
+        return Err(WorkspaceThemeError {
+            message: format!("Unable to update theme: {err}"),
+            form: WorkspaceThemeView {
+                app_name,
+                logo_url: resolved_logo,
+                theme_key,
+                background_hue,
+            },
+        });
+    }
+
+    Ok(())
+}
+
 pub fn workspace_email_settings_view(workspace: &Workspace) -> WorkspaceEmailSettingsView {
     WorkspaceEmailSettingsView::new(
         workspace.email_provider.clone(),
@@ -337,6 +518,76 @@ pub fn default_email_settings_view() -> WorkspaceEmailSettingsView {
     WorkspaceEmailSettingsView::new(
         "Mailtrap", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "",
     )
+}
+
+pub fn workspace_theme_view(workspace: &Workspace) -> WorkspaceThemeView {
+    WorkspaceThemeView {
+        app_name: workspace.app_name.clone(),
+        logo_url: logo_url_from_path(&workspace.logo_path),
+        theme_key: workspace.theme_key.clone(),
+        background_hue: workspace.background_hue,
+    }
+}
+
+pub fn default_theme_view() -> WorkspaceThemeView {
+    WorkspaceThemeView {
+        app_name: "Kinetic".to_string(),
+        logo_url: "/static/logo.png".to_string(),
+        theme_key: "kinetic".to_string(),
+        background_hue: 32,
+    }
+}
+
+pub fn workspace_brand_view(workspace: &Workspace) -> WorkspaceBrandView {
+    let (primary, secondary, on_primary) = theme_palette(&workspace.theme_key);
+    WorkspaceBrandView {
+        app_name: if workspace.app_name.trim().is_empty() {
+            workspace.name.clone()
+        } else {
+            workspace.app_name.clone()
+        },
+        logo_url: logo_url_from_path(&workspace.logo_path),
+        theme_key: workspace.theme_key.clone(),
+        background_hue: workspace.background_hue,
+        primary,
+        secondary,
+        on_primary,
+    }
+}
+
+pub fn default_workspace_brand_view() -> WorkspaceBrandView {
+    let (primary, secondary, on_primary) = theme_palette("kinetic");
+    WorkspaceBrandView {
+        app_name: "Kinetic".to_string(),
+        logo_url: "/static/logo.png".to_string(),
+        theme_key: "kinetic".to_string(),
+        background_hue: 32,
+        primary,
+        secondary,
+        on_primary,
+    }
+}
+
+fn theme_palette(theme_key: &str) -> (String, String, String) {
+    theme_options()
+        .into_iter()
+        .find(|option| option.key == theme_key)
+        .map(|option| (option.primary, option.secondary, option.on_primary))
+        .unwrap_or_else(|| {
+            (
+                "#f59e0b".to_string(),
+                "#ef4444".to_string(),
+                "#111827".to_string(),
+            )
+        })
+}
+
+fn logo_url_from_path(path: &str) -> String {
+    if path.trim().is_empty() {
+        "/static/logo.png".to_string()
+    } else {
+        path.to_string()
+    }
 }
 
 pub async fn delete_workspace(db: &Db, id: i64) -> Result<(), String> {

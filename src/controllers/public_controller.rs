@@ -14,6 +14,7 @@ use crate::models::{
     RegisterForm,
     RegisterView,
     UserPermissionForm,
+    WorkspaceThemeForm,
     WorkspaceRegisterForm,
     WorkspaceRegisterView,
     WorkspaceEmailSettingsForm,
@@ -32,6 +33,9 @@ use crate::services::{
     workspace_service,
 };
 use crate::Db;
+use chrono::Utc;
+use std::fs;
+use std::path::Path;
 
 fn to_datetime_local(value: &str) -> String {
     let trimmed = value.trim();
@@ -72,6 +76,15 @@ async fn workspace_user(
         return Err(Redirect::to(uri!(dashboard(slug = user.tenant_slug))));
     }
     Ok(user)
+}
+
+async fn workspace_brand(db: &Db, tenant_id: i64) -> crate::models::WorkspaceBrandView {
+    workspace_service::find_workspace_by_id(db, tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace_service::workspace_brand_view(&workspace))
+        .unwrap_or_else(workspace_service::default_workspace_brand_view)
 }
 
 #[get("/")]
@@ -524,6 +537,7 @@ pub async fn dashboard(
         context! {
             title: "Dashboard",
             current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             tenant_slug: user.tenant_slug,
             email: user.email,
             can_view_clients: can_view_clients,
@@ -599,6 +613,7 @@ pub async fn tracking(
         context! {
             title: "Tracking",
             current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             deployments: deployments,
             selected_deployment: selected_deployment,
             updates: updates,
@@ -661,6 +676,7 @@ pub async fn tracking_update_create(
                     context! {
                         title: "Tracking",
                         current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                         deployments: deployments,
                         selected_deployment: Option::<i64>::None,
                         updates: Vec::<crate::models::DeploymentUpdate>::new(),
@@ -699,6 +715,7 @@ pub async fn tracking_update_create(
                 context! {
                     title: "Tracking",
                     current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     deployments: deployments,
                     selected_deployment: selected_deployment,
                     updates: updates,
@@ -804,9 +821,15 @@ pub async fn settings(
         .as_ref()
         .map(workspace_service::workspace_email_settings_view)
         .unwrap_or_else(workspace_service::default_email_settings_view);
+    let theme_form = workspace
+        .as_ref()
+        .map(workspace_service::workspace_theme_view)
+        .unwrap_or_else(workspace_service::default_theme_view);
+    let theme_options = workspace_service::theme_options();
+    let workspace_brand = workspace_brand(db, user.tenant_id).await;
     let is_owner = access_service::is_owner(&user.role);
     let requested_tab = tab.unwrap_or_else(|| "email".to_string());
-    let active_tab = if !is_owner && requested_tab == "users" {
+    let active_tab = if !is_owner && (requested_tab == "users" || requested_tab == "theme") {
         "email".to_string()
     } else {
         requested_tab
@@ -858,9 +881,12 @@ pub async fn settings(
         context! {
             title: "Settings",
             current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand,
             error: Option::<String>::None,
             email_form: email_form,
             email_provider_options: workspace_service::email_provider_options(),
+            theme_form: theme_form,
+            theme_options: theme_options,
             active_tab: active_tab,
             is_owner: is_owner,
             users: users_context,
@@ -894,11 +920,156 @@ pub async fn settings_email_update(
             context! {
                 title: "Settings",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 email_form: err.form,
                 email_provider_options: workspace_service::email_provider_options(),
+                theme_form: workspace_service::default_theme_view(),
+                theme_options: workspace_service::theme_options(),
                 active_tab: "email",
                 is_owner: access_service::is_owner(&user.role),
+                users: Vec::<serde_json::Value>::new(),
+                role_options: access_service::role_options(),
+            },
+        )),
+    }
+}
+
+#[post("/<slug>/settings/theme", data = "<form>")]
+pub async fn settings_theme_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    form: Form<WorkspaceThemeForm<'_>>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::is_owner(&user.role) {
+        return Ok(Redirect::to(uri!(settings(
+            slug = user.tenant_slug,
+            tab = Some("theme".to_string())
+        ))));
+    }
+
+    let existing_theme_form = workspace_service::find_workspace_by_id(db, user.tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .as_ref()
+        .map(workspace_service::workspace_theme_view)
+        .unwrap_or_else(workspace_service::default_theme_view);
+
+    let mut form = form.into_inner();
+    let mut logo_path = None;
+    if let Some(mut logo) = form.logo.take() {
+        if logo.len() > 0 {
+            let content_type = logo.content_type().map(|value| value.media_type());
+            let extension = match content_type {
+                Some(media_type) if media_type.top().eq("image") => match media_type.sub().as_str() {
+                    "png" => Some("png"),
+                    "jpeg" | "jpg" => Some("jpg"),
+                    "svg+xml" => Some("svg"),
+                    "webp" => Some("webp"),
+                    _ => None,
+                },
+                _ => None,
+            };
+
+            let extension = match extension {
+                Some(value) => value,
+                None => {
+                    return Err(Template::render(
+                        "placeholders/settings",
+                        context! {
+                            title: "Settings",
+                            current_user: Some(CurrentUserView::from(&user)),
+                            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                            error: "Logo must be a PNG, JPG, SVG, or WebP image.".to_string(),
+                            email_form: workspace_service::default_email_settings_view(),
+                            email_provider_options: workspace_service::email_provider_options(),
+                            theme_form: existing_theme_form,
+                            theme_options: workspace_service::theme_options(),
+                            active_tab: "theme",
+                            is_owner: true,
+                            users: Vec::<serde_json::Value>::new(),
+                            role_options: access_service::role_options(),
+                        },
+                    ));
+                }
+            };
+
+            let upload_dir = Path::new("static/uploads");
+            if let Err(err) = fs::create_dir_all(upload_dir) {
+                return Err(Template::render(
+                    "placeholders/settings",
+                    context! {
+                        title: "Settings",
+                        current_user: Some(CurrentUserView::from(&user)),
+                        workspace_brand: workspace_brand(db, user.tenant_id).await,
+                        error: format!("Unable to create upload folder: {err}"),
+                        email_form: workspace_service::default_email_settings_view(),
+                        email_provider_options: workspace_service::email_provider_options(),
+                        theme_form: existing_theme_form,
+                        theme_options: workspace_service::theme_options(),
+                        active_tab: "theme",
+                        is_owner: true,
+                        users: Vec::<serde_json::Value>::new(),
+                        role_options: access_service::role_options(),
+                    },
+                ));
+            }
+
+            let filename = format!(
+                "tenant-{}-{}.{}",
+                user.tenant_id,
+                Utc::now().timestamp(),
+                extension
+            );
+            let target_path = upload_dir.join(&filename);
+            if let Err(err) = logo.persist_to(&target_path).await {
+                return Err(Template::render(
+                    "placeholders/settings",
+                    context! {
+                        title: "Settings",
+                        current_user: Some(CurrentUserView::from(&user)),
+                        workspace_brand: workspace_brand(db, user.tenant_id).await,
+                        error: format!("Unable to save logo: {err}"),
+                        email_form: workspace_service::default_email_settings_view(),
+                        email_provider_options: workspace_service::email_provider_options(),
+                        theme_form: existing_theme_form,
+                        theme_options: workspace_service::theme_options(),
+                        active_tab: "theme",
+                        is_owner: true,
+                        users: Vec::<serde_json::Value>::new(),
+                        role_options: access_service::role_options(),
+                    },
+                ));
+            }
+
+            logo_path = Some(format!("/static/uploads/{}", filename));
+        }
+    }
+
+    match workspace_service::update_theme_settings(db, user.tenant_id, form, logo_path).await {
+        Ok(_) => Ok(Redirect::to(uri!(settings(
+            slug = user.tenant_slug,
+            tab = Some("theme".to_string())
+        )))),
+        Err(err) => Err(Template::render(
+            "placeholders/settings",
+            context! {
+                title: "Settings",
+                current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                error: err.message,
+                email_form: workspace_service::default_email_settings_view(),
+                email_provider_options: workspace_service::email_provider_options(),
+                theme_form: err.form,
+                theme_options: workspace_service::theme_options(),
+                active_tab: "theme",
+                is_owner: true,
                 users: Vec::<serde_json::Value>::new(),
                 role_options: access_service::role_options(),
             },
@@ -934,14 +1105,21 @@ pub async fn settings_seed_demo(
                 .as_ref()
                 .map(workspace_service::workspace_email_settings_view)
                 .unwrap_or_else(workspace_service::default_email_settings_view);
+            let theme_form = workspace
+                .as_ref()
+                .map(workspace_service::workspace_theme_view)
+                .unwrap_or_else(workspace_service::default_theme_view);
             Err(Template::render(
                 "placeholders/settings",
                 context! {
                     title: "Settings",
                     current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     error: message,
                     email_form: email_form,
                     email_provider_options: workspace_service::email_provider_options(),
+                    theme_form: theme_form,
+                    theme_options: workspace_service::theme_options(),
                     active_tab: "email",
                     is_owner: access_service::is_owner(&user.role),
                     users: Vec::<serde_json::Value>::new(),
@@ -983,9 +1161,12 @@ pub async fn settings_users_update(
             context! {
                 title: "Settings",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: "Invalid role selection.".to_string(),
                 email_form: workspace_service::default_email_settings_view(),
                 email_provider_options: workspace_service::email_provider_options(),
+                theme_form: workspace_service::default_theme_view(),
+                theme_options: workspace_service::theme_options(),
                 active_tab: "users",
                 is_owner: true,
                 users: Vec::<serde_json::Value>::new(),
@@ -1016,9 +1197,12 @@ pub async fn settings_users_update(
             context! {
                 title: "Settings",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: format!("Unable to update user role: {err}"),
                 email_form: workspace_service::default_email_settings_view(),
                 email_provider_options: workspace_service::email_provider_options(),
+                theme_form: workspace_service::default_theme_view(),
+                theme_options: workspace_service::theme_options(),
                 active_tab: "users",
                 is_owner: true,
                 users: Vec::<serde_json::Value>::new(),
@@ -1040,9 +1224,12 @@ pub async fn settings_users_update(
             context! {
                 title: "Settings",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: format!("Unable to update permissions: {err}"),
                 email_form: workspace_service::default_email_settings_view(),
                 email_provider_options: workspace_service::email_provider_options(),
+                theme_form: workspace_service::default_theme_view(),
+                theme_options: workspace_service::theme_options(),
                 active_tab: "users",
                 is_owner: true,
                 users: Vec::<serde_json::Value>::new(),
@@ -1118,6 +1305,7 @@ pub async fn deployments(
         context! {
             title: "Deployments",
             current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             deployments: deployments,
         },
     ))
@@ -1144,6 +1332,7 @@ pub async fn deployment_new_form(
         context! {
             title: "New deployment",
             current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             form: DeploymentFormView::new(0, 0, "", "", 0.0, "", "Scheduled"),
             clients: clients,
@@ -1182,6 +1371,7 @@ pub async fn deployment_create(
             context! {
                 title: "New deployment",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 form: err.form,
                 clients: clients,
@@ -1211,6 +1401,7 @@ pub async fn deployment_edit_form(
                 context! {
                     title: "Deployments",
                     current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     deployments: Vec::<DeploymentFormView>::new(),
                     error: "Deployment not found.".to_string(),
                 },
@@ -1229,6 +1420,7 @@ pub async fn deployment_edit_form(
         context! {
             title: "Edit deployment",
             current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             deployment_id: deployment.id,
             form: DeploymentFormView::new(
@@ -1277,6 +1469,7 @@ pub async fn deployment_update(
             context! {
                 title: "Edit deployment",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 deployment_id: id,
                 form: err.form,
@@ -1345,6 +1538,7 @@ pub async fn deployment_delete(
             context! {
                 title: "Deployments",
                 current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 deployments: deployments,
                 error: message,
             },
@@ -1353,3 +1547,5 @@ pub async fn deployment_delete(
 
     Ok(Redirect::to(uri!(deployments(slug = user.tenant_slug))))
 }
+
+

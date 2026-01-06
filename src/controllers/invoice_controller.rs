@@ -11,7 +11,14 @@ use crate::models::{
     InvoiceForm,
     InvoiceFormView,
 };
-use crate::services::{access_service, auth_service, email_service, invoice_service, tracking_service};
+use crate::services::{
+    access_service,
+    auth_service,
+    email_service,
+    invoice_service,
+    tracking_service,
+    workspace_service,
+};
 use crate::Db;
 
 async fn tenant_from_cookies(
@@ -28,6 +35,15 @@ async fn tenant_from_cookies(
             .map(|user| (tenant_id, user)),
         _ => None,
     }
+}
+
+async fn workspace_brand(db: &Db, tenant_id: i64) -> crate::models::WorkspaceBrandView {
+    workspace_service::find_workspace_by_id(db, tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace_service::workspace_brand_view(&workspace))
+        .unwrap_or_else(workspace_service::default_workspace_brand_view)
 }
 
 fn invoice_number(id: i64) -> String {
@@ -161,6 +177,7 @@ pub async fn invoices_index(
         context! {
             title: "Invoices",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
             invoices: invoice_items,
             pending_invoices: pending,
             error: Option::<String>::None,
@@ -202,6 +219,7 @@ pub async fn invoice_new_form(
         context! {
             title: "New invoice",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
             error: Option::<String>::None,
             form: InvoiceFormView::new(selected, "Draft", ""),
             deployment_options: deployment_options,
@@ -247,6 +265,7 @@ pub async fn invoice_create(
             context! {
                 title: "New invoice",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                 error: err.message,
                 form: err.form,
                 deployment_options: deployment_options,
@@ -308,6 +327,7 @@ pub async fn invoice_show(
                 context! {
                     title: "Invoices",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                     invoices: invoices,
                     pending_invoices: Vec::<serde_json::Value>::new(),
                     error: "Invoice not found.".to_string(),
@@ -327,6 +347,7 @@ pub async fn invoice_show(
         context! {
             title: "Invoice",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
             invoice: invoice,
             invoice_number: invoice_number(id),
             updates: updates,
@@ -390,6 +411,7 @@ pub async fn invoice_edit_form(
                 context! {
                     title: "Invoices",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                     invoices: invoices,
                     pending_invoices: Vec::<serde_json::Value>::new(),
                     error: "Invoice not found.".to_string(),
@@ -409,6 +431,7 @@ pub async fn invoice_edit_form(
         context! {
             title: "Edit invoice",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
             error: Option::<String>::None,
             invoice: invoice,
             invoice_number: invoice_number(id),
@@ -471,6 +494,7 @@ pub async fn invoice_update(
                 context! {
                     title: "Invoices",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                     invoices: invoices,
                     pending_invoices: Vec::<serde_json::Value>::new(),
                     error: "Invoice not found.".to_string(),
@@ -489,6 +513,7 @@ pub async fn invoice_update(
             context! {
                 title: "Edit invoice",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                 error: err.message,
                 invoice: invoice,
                 invoice_number: invoice_number(id),
@@ -549,6 +574,7 @@ pub async fn invoice_delete(
             context! {
                 title: "Invoices",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                 invoices: invoices,
                 pending_invoices: Vec::<serde_json::Value>::new(),
                 error: message,
@@ -614,6 +640,7 @@ pub async fn invoice_email_form(
                 context! {
                     title: "Invoices",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                     invoices: invoices,
                     pending_invoices: Vec::<serde_json::Value>::new(),
                     error: "Invoice not found.".to_string(),
@@ -641,6 +668,7 @@ pub async fn invoice_email_form(
         context! {
             title: "Email invoice",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
             client: context! {
                 company_name: invoice.client_name.clone(),
                 email: invoice.client_email.clone()
@@ -699,6 +727,7 @@ pub async fn invoice_email_send(
             context! {
                 title: "Email invoice",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                 client: context! {
                     company_name: invoice.client_name.clone(),
                     email: invoice.client_email.clone()
@@ -735,6 +764,7 @@ pub async fn invoice_email_send(
             context! {
                 title: "Email invoice",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, tenant_id).await,
                 client: context! {
                     company_name: invoice.client_name.clone(),
                     email: invoice.client_email.clone()
@@ -750,3 +780,4 @@ pub async fn invoice_email_send(
         )),
     }
 }
+

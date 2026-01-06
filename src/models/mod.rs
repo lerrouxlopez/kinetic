@@ -1,4 +1,5 @@
 use rocket::form::FromForm;
+use rocket::fs::TempFile;
 use serde::Serialize;
 
 #[derive(FromForm)]
@@ -51,6 +52,14 @@ pub struct WorkspaceEmailSettingsForm {
     pub ses_secret_key: String,
     pub ses_region: String,
     pub sendmail_path: String,
+}
+
+#[derive(FromForm)]
+pub struct WorkspaceThemeForm<'r> {
+    pub app_name: Option<String>,
+    pub theme_key: Option<String>,
+    pub background_hue: Option<i64>,
+    pub logo: Option<TempFile<'r>>,
 }
 
 #[derive(FromForm)]
@@ -154,6 +163,10 @@ pub struct Workspace {
     pub id: i64,
     pub slug: String,
     pub name: String,
+    pub app_name: String,
+    pub logo_path: String,
+    pub theme_key: String,
+    pub background_hue: i64,
     pub email_provider: String,
     pub email_from_name: String,
     pub email_from_address: String,
@@ -448,6 +461,34 @@ pub struct WorkspaceEmailSettingsView {
     pub ses_secret_key: String,
     pub ses_region: String,
     pub sendmail_path: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct WorkspaceThemeView {
+    pub app_name: String,
+    pub logo_url: String,
+    pub theme_key: String,
+    pub background_hue: i64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct WorkspaceBrandView {
+    pub app_name: String,
+    pub logo_url: String,
+    pub theme_key: String,
+    pub background_hue: i64,
+    pub primary: String,
+    pub secondary: String,
+    pub on_primary: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ThemeOption {
+    pub key: String,
+    pub name: String,
+    pub primary: String,
+    pub secondary: String,
+    pub on_primary: String,
 }
 
 #[derive(Serialize, Clone)]

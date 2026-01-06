@@ -11,7 +11,7 @@ use crate::models::{
     CurrentUserView,
     PaginationView,
 };
-use crate::services::{access_service, auth_service, crew_service};
+use crate::services::{access_service, auth_service, crew_service, workspace_service};
 use crate::repositories::user_repo;
 use crate::Db;
 
@@ -74,6 +74,15 @@ async fn tenant_from_cookies(
     }
 }
 
+async fn workspace_brand(db: &Db, tenant_id: i64) -> crate::models::WorkspaceBrandView {
+    workspace_service::find_workspace_by_id(db, tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace_service::workspace_brand_view(&workspace))
+        .unwrap_or_else(workspace_service::default_workspace_brand_view)
+}
+
 #[get("/<slug>/crew?<page>")]
 pub async fn crew_index(
     cookies: &CookieJar<'_>,
@@ -117,6 +126,7 @@ pub async fn crew_index(
         context! {
             title: "Crew roster",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             crews: crews,
             stats: stats,
             pagination: pagination,
@@ -159,6 +169,7 @@ pub async fn crew_show(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -185,6 +196,7 @@ pub async fn crew_show(
         context! {
             title: "Crew details",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             crew: crew,
             members: members,
             members_count: total_members as usize,
@@ -219,6 +231,7 @@ pub async fn crew_new_form(
         context! {
             title: "New crew",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             form: CrewFormView::new("", "Active"),
             status_options: crew_service::status_options(),
@@ -261,6 +274,7 @@ pub async fn crew_create(
             context! {
                 title: "New crew",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 form: err.form,
                 status_options: crew_service::status_options(),
@@ -300,6 +314,7 @@ pub async fn crew_edit_form(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -313,6 +328,7 @@ pub async fn crew_edit_form(
         context! {
             title: "Edit crew",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             crew_id: crew.id,
             form: CrewFormView::new(crew.name, crew.status),
@@ -355,6 +371,7 @@ pub async fn crew_member_new_form(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -371,6 +388,7 @@ pub async fn crew_member_new_form(
         context! {
             title: "New member",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             crew: crew,
             form: CrewMemberFormView::new(0, "", "", ""),
@@ -415,6 +433,7 @@ pub async fn crew_member_create(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -437,6 +456,7 @@ pub async fn crew_member_create(
             context! {
                 title: "New member",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 crew: crew,
                 form: err.form,
@@ -482,6 +502,7 @@ pub async fn crew_member_edit_form(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -500,6 +521,7 @@ pub async fn crew_member_edit_form(
                 context! {
                     title: "Crew details",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crew: crew,
                     members: Vec::<crate::models::CrewMember>::new(),
                     members_count: 0,
@@ -528,6 +550,7 @@ pub async fn crew_member_edit_form(
         context! {
             title: "Edit member",
             current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
             crew: crew,
             error: Option::<String>::None,
             member_id: member.id,
@@ -579,6 +602,7 @@ pub async fn crew_member_update(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -601,6 +625,7 @@ pub async fn crew_member_update(
             context! {
                 title: "Edit member",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 crew: crew,
                 error: err.message,
                 member_id: member_id,
@@ -647,6 +672,7 @@ pub async fn crew_member_delete(
                 context! {
                     title: "Crew roster",
                     current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
@@ -663,6 +689,7 @@ pub async fn crew_member_delete(
             context! {
                 title: "Crew details",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 crew: crew,
                 members: Vec::<crate::models::CrewMember>::new(),
                 members_count: 0,
@@ -715,6 +742,7 @@ pub async fn crew_update(
             context! {
                 title: "Edit crew",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 crew_id: id,
                 form: err.form,
@@ -755,6 +783,7 @@ pub async fn crew_delete(
             context! {
                 title: "Crew roster",
                 current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
                 crews: Vec::<crate::models::Crew>::new(),
                 stats: crew_service::stats_from_crews(&[]),
                 error: message,
@@ -767,3 +796,5 @@ pub async fn crew_delete(
         page = Option::<usize>::None
     ))))
 }
+
+

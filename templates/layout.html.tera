@@ -3,21 +3,55 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title }} | Kinetic</title>
+    {% set brand_name = "Kinetic" %}
+    {% set brand_logo = "/static/logo.png" %}
+    {% set brand_primary = "#f59e0b" %}
+    {% set brand_secondary = "#ef4444" %}
+    {% set brand_on_primary = "#111827" %}
+    {% set brand_hue = 32 %}
+    {% if workspace_brand is defined %}
+      {% set brand_name = workspace_brand.app_name %}
+      {% set brand_logo = workspace_brand.logo_url %}
+      {% set brand_primary = workspace_brand.primary %}
+      {% set brand_secondary = workspace_brand.secondary %}
+      {% set brand_on_primary = workspace_brand.on_primary %}
+      {% set brand_hue = workspace_brand.background_hue %}
+    {% endif %}
+    <title>{{ title }} | {{ brand_name }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="/static/styles.css" rel="stylesheet">
+    <style>
+      :root {
+        --kinetic-primary: {{ brand_primary }};
+        --kinetic-primary-dark: {{ brand_secondary }};
+        --kinetic-on-primary: {{ brand_on_primary }};
+        --kinetic-chart-start: {{ brand_primary }};
+        --kinetic-chart-end: {{ brand_secondary }};
+        --kinetic-chart-stroke: {{ brand_primary }};
+        --kinetic-chart-point: {{ brand_secondary }};
+        --kinetic-chart-soft: color-mix(in srgb, {{ brand_primary }} 18%, transparent);
+        --kinetic-chart-soft-1: color-mix(in srgb, {{ brand_primary }} 12%, transparent);
+        --kinetic-chart-soft-2: color-mix(in srgb, {{ brand_secondary }} 12%, transparent);
+        --kinetic-chart-border: color-mix(in srgb, {{ brand_secondary }} 30%, transparent);
+        --kinetic-chart-line-1: color-mix(in srgb, {{ brand_primary }} 50%, transparent);
+        --kinetic-chart-line-2: color-mix(in srgb, {{ brand_secondary }} 50%, transparent);
+        --kinetic-chart-donut-base: color-mix(in srgb, {{ brand_primary }} 30%, transparent);
+        --kinetic-chart-donut-accent: color-mix(in srgb, {{ brand_secondary }} 50%, transparent);
+        --kinetic-bg-hue: {{ brand_hue }};
+      }
+    </style>
   </head>
   <body class="app-shell">
     <div class="page-glow"></div>
     <nav class="navbar navbar-expand-lg py-3">
       <div class="container">
         <a class="navbar-brand d-flex align-items-center" href="/">
-          <img src="/static/logo.png" alt="Kinetic logo" class="brand-logo">
-          <span class="brand-title">Kinetic</span>
+          <img src="{{ brand_logo }}" alt="{{ brand_name }} logo" class="brand-logo">
+          <span class="brand-title">{{ brand_name }}</span>
         </a>
         <div class="d-flex align-items-center gap-2 navbar-actions">
           {% if current_user %}

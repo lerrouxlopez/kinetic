@@ -19,9 +19,15 @@ pub async fn create_tenant(
     slug: &str,
     name: &str,
 ) -> Result<i64, sqlx::Error> {
-    sqlx::query("INSERT INTO tenants (slug, name) VALUES (?, ?)")
+    sqlx::query(
+        "INSERT INTO tenants (slug, name, app_name, theme_key, background_hue, logo_path) VALUES (?, ?, ?, ?, ?, ?)",
+    )
         .bind(slug)
         .bind(name)
+        .bind(name)
+        .bind("kinetic")
+        .bind(32)
+        .bind("")
         .execute(&db.0)
         .await?;
 
@@ -38,6 +44,10 @@ pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
         SELECT id,
                slug,
                name,
+               app_name,
+               logo_path,
+               theme_key,
+               background_hue,
                email_provider,
                email_from_name,
                email_from_address,
@@ -67,6 +77,10 @@ pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
             id: row.get("id"),
             slug: row.get("slug"),
             name: row.get("name"),
+            app_name: row.get("app_name"),
+            logo_path: row.get("logo_path"),
+            theme_key: row.get("theme_key"),
+            background_hue: row.get("background_hue"),
             email_provider: row.get("email_provider"),
             email_from_name: row.get("email_from_name"),
             email_from_address: row.get("email_from_address"),
@@ -97,6 +111,10 @@ pub async fn list_workspaces_paged(
         SELECT id,
                slug,
                name,
+               app_name,
+               logo_path,
+               theme_key,
+               background_hue,
                email_provider,
                email_from_name,
                email_from_address,
@@ -129,6 +147,10 @@ pub async fn list_workspaces_paged(
             id: row.get("id"),
             slug: row.get("slug"),
             name: row.get("name"),
+            app_name: row.get("app_name"),
+            logo_path: row.get("logo_path"),
+            theme_key: row.get("theme_key"),
+            background_hue: row.get("background_hue"),
             email_provider: row.get("email_provider"),
             email_from_name: row.get("email_from_name"),
             email_from_address: row.get("email_from_address"),
@@ -165,6 +187,10 @@ pub async fn find_workspace_by_id(
         SELECT id,
                slug,
                name,
+               app_name,
+               logo_path,
+               theme_key,
+               background_hue,
                email_provider,
                email_from_name,
                email_from_address,
@@ -193,6 +219,10 @@ pub async fn find_workspace_by_id(
         id: row.get("id"),
         slug: row.get("slug"),
         name: row.get("name"),
+        app_name: row.get("app_name"),
+        logo_path: row.get("logo_path"),
+        theme_key: row.get("theme_key"),
+        background_hue: row.get("background_hue"),
         email_provider: row.get("email_provider"),
         email_from_name: row.get("email_from_name"),
         email_from_address: row.get("email_from_address"),
@@ -285,6 +315,27 @@ pub async fn update_email_settings(
     .bind(ses_secret_key)
     .bind(ses_region)
     .bind(sendmail_path)
+    .bind(id)
+    .execute(&db.0)
+    .await?;
+    Ok(())
+}
+
+pub async fn update_theme_settings(
+    db: &Db,
+    id: i64,
+    app_name: &str,
+    theme_key: &str,
+    background_hue: i64,
+    logo_path: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE tenants SET app_name = ?, theme_key = ?, background_hue = ?, logo_path = ? WHERE id = ?",
+    )
+    .bind(app_name)
+    .bind(theme_key)
+    .bind(background_hue)
+    .bind(logo_path)
     .bind(id)
     .execute(&db.0)
     .await?;

@@ -8,13 +8,16 @@
       {% if error %}
         <div class="alert alert-danger mt-3">{{ error }}</div>
       {% endif %}
-      <ul class="nav nav-pills mt-3">
+      <ul class="nav nav-pills mt-3 settings-tabs">
         <li class="nav-item">
           <a class="nav-link {% if active_tab == 'email' %}active{% endif %}" href="/{{ current_user.tenant_slug }}/settings?tab=email">Email</a>
         </li>
         {% if is_owner %}
           <li class="nav-item">
             <a class="nav-link {% if active_tab == 'users' %}active{% endif %}" href="/{{ current_user.tenant_slug }}/settings?tab=users">Users</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link {% if active_tab == 'theme' %}active{% endif %}" href="/{{ current_user.tenant_slug }}/settings?tab=theme">Theme</a>
           </li>
         {% endif %}
       </ul>
@@ -244,12 +247,71 @@
           {% endif %}
         </div>
       {% endif %}
+
+      {% if active_tab == "theme" and is_owner %}
+        <form class="mt-4" method="post" action="/{{ current_user.tenant_slug }}/settings/theme" enctype="multipart/form-data">
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <label class="form-label">App name</label>
+              <input class="form-control" name="app_name" value="{{ theme_form.app_name }}" placeholder="Kinetic">
+              <div class="form-text text-muted">Shown in the header and browser tab. Leave blank to keep current.</div>
+            </div>
+            <div class="col-lg-6">
+              <label class="form-label">Logo upload</label>
+              <input class="form-control" type="file" name="logo" accept="image/*">
+              <div class="form-text text-muted">Optional. PNG, JPG, SVG, or WebP. Transparent backgrounds work best.</div>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <label class="form-label">Background hue</label>
+            <div class="d-flex align-items-center gap-3">
+              <div class="hue-preview" style="background: hsl({{ theme_form.background_hue }} 85% 92%);"></div>
+              <input class="form-range flex-grow-1" type="range" min="0" max="360" name="background_hue" value="{{ theme_form.background_hue }}">
+            </div>
+            <div class="text-muted small">Hue value: <span class="theme-hue-value">{{ theme_form.background_hue }}</span></div>
+            <div class="form-text text-muted">Adjust the ambient background tone for this workspace.</div>
+          </div>
+
+          <div class="mt-4">
+            <div class="d-flex align-items-center justify-content-between mb-3">
+              <div>
+                <h3 class="h6 fw-semibold mb-1">Theme palette</h3>
+                <p class="text-muted mb-0">Select a primary + secondary color scheme.</p>
+              </div>
+            </div>
+            <div class="theme-grid">
+              {% for theme in theme_options %}
+                <label class="theme-card">
+                  <div class="theme-swatch" style="background: linear-gradient(135deg, {{ theme.primary }}, {{ theme.secondary }});"></div>
+                  <div class="d-flex align-items-center">
+                    <input type="radio" name="theme_key" value="{{ theme.key }}" {% if theme_form.theme_key == theme.key %}checked{% endif %}>
+                    <span class="theme-label">{{ theme.name }}</span>
+                  </div>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          {% if theme_form.logo_url %}
+            <div class="mt-4">
+              <div class="text-muted small mb-2">Current logo preview</div>
+              <img src="{{ theme_form.logo_url }}" alt="Workspace logo preview" class="brand-logo">
+            </div>
+          {% endif %}
+
+          <button class="btn btn-primary mt-4" type="submit">Save theme</button>
+        </form>
+      {% endif %}
     </div>
   </div>
   <script>
     (() => {
       const providerSelect = document.querySelector('select[name="email_provider"]');
       const sections = document.querySelectorAll(".provider-section");
+      const hueInput = document.querySelector('input[name="background_hue"]');
+      const hueLabel = document.querySelector(".theme-hue-value");
+      const huePreview = document.querySelector(".hue-preview");
 
       const refreshSections = () => {
         const value = providerSelect ? providerSelect.value : "";
@@ -260,6 +322,14 @@
 
       if (providerSelect) {
         providerSelect.addEventListener("change", refreshSections);
+      }
+      if (hueInput && hueLabel) {
+        hueInput.addEventListener("input", () => {
+          hueLabel.textContent = hueInput.value;
+          if (huePreview) {
+            huePreview.style.background = `hsl(${hueInput.value} 85% 92%)`;
+          }
+        });
       }
       refreshSections();
     })();
