@@ -3,8 +3,7 @@ use serde::Serialize;
 
 #[derive(FromForm)]
 pub struct RegisterForm {
-    pub tenant_slug: String,
-    pub tenant_name: Option<String>,
+    pub tenant_name: String,
     pub email: String,
     pub password: String,
 }
@@ -57,7 +56,6 @@ pub struct WorkspaceEmailSettingsForm {
 #[derive(FromForm)]
 pub struct CrewForm {
     pub name: String,
-    pub members_count: i64,
     pub status: String,
 }
 
@@ -340,7 +338,6 @@ pub struct AdminAuth {
 
 #[derive(Serialize, Clone)]
 pub struct RegisterView {
-    pub tenant_slug: String,
     pub tenant_name: String,
     pub email: String,
 }
@@ -365,7 +362,6 @@ pub struct WorkspaceFormView {
 #[derive(Serialize, Clone)]
 pub struct CrewFormView {
     pub name: String,
-    pub members_count: i64,
     pub status: String,
 }
 
@@ -516,12 +512,10 @@ impl From<&User> for CurrentUserView {
 
 impl RegisterView {
     pub fn new(
-        tenant_slug: impl Into<String>,
         tenant_name: impl Into<String>,
         email: impl Into<String>,
     ) -> Self {
         RegisterView {
-            tenant_slug: tenant_slug.into(),
             tenant_name: tenant_name.into(),
             email: email.into(),
         }
@@ -593,10 +587,9 @@ impl WorkspaceEmailSettingsView {
 }
 
 impl CrewFormView {
-    pub fn new(name: impl Into<String>, members_count: i64, status: impl Into<String>) -> Self {
+    pub fn new(name: impl Into<String>, status: impl Into<String>) -> Self {
         CrewFormView {
             name: name.into(),
-            members_count,
             status: status.into(),
         }
     }

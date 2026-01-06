@@ -167,6 +167,17 @@ pub async fn delete_invoice(db: &Db, tenant_id: i64, invoice_id: i64) -> Result<
         .map_err(|err| format!("Unable to delete invoice: {err}"))
 }
 
+pub async fn count_invoices(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
+    invoice_repo::count_invoices(db, tenant_id).await
+}
+
+pub async fn count_invoices_by_status(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    invoice_repo::count_invoices_by_status(db, tenant_id).await
+}
+
 fn normalize_status(input: String) -> String {
     let trimmed = input.trim();
     for option in status_options() {

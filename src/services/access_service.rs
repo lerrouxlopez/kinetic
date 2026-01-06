@@ -46,6 +46,18 @@ pub fn is_employee(role: &str) -> bool {
     normalize_role(role).eq_ignore_ascii_case(ROLE_EMPLOYEE)
 }
 
+pub fn is_sales(role: &str) -> bool {
+    normalize_role(role).eq_ignore_ascii_case(ROLE_SALES)
+}
+
+pub fn is_operations(role: &str) -> bool {
+    normalize_role(role).eq_ignore_ascii_case(ROLE_OPERATIONS)
+}
+
+pub fn is_accounting(role: &str) -> bool {
+    normalize_role(role).eq_ignore_ascii_case(ROLE_ACCOUNTING)
+}
+
 pub async fn list_permissions_for_user(
     db: &Db,
     tenant_id: i64,

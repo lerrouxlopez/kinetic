@@ -47,6 +47,10 @@ pub async fn count_crews(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
     crew_repo::count_crews(db, tenant_id).await
 }
 
+pub async fn count_active_crews_all(db: &Db) -> Result<i64, sqlx::Error> {
+    crew_repo::count_crews_by_status(db, STATUS_ACTIVE).await
+}
+
 pub async fn find_crew_by_id(
     db: &Db,
     tenant_id: i64,
@@ -118,22 +122,15 @@ pub async fn create_crew(
     if name.is_empty() {
         return Err(CrewError {
             message: "Crew name is required.".to_string(),
-            form: CrewFormView::new("", form.members_count, status),
+            form: CrewFormView::new("", status),
         });
     }
 
-    if form.members_count < 0 {
-        return Err(CrewError {
-            message: "Members count must be zero or more.".to_string(),
-            form: CrewFormView::new(name, form.members_count, status),
-        });
-    }
-
-    if let Err(err) = crew_repo::create_crew(db, tenant_id, &name, form.members_count, &status).await
+    if let Err(err) = crew_repo::create_crew(db, tenant_id, &name, &status).await
     {
         return Err(CrewError {
             message: format!("Unable to create crew: {err}"),
-            form: CrewFormView::new(name, form.members_count, status),
+            form: CrewFormView::new(name, status),
         });
     }
 
@@ -152,23 +149,14 @@ pub async fn update_crew(
     if name.is_empty() {
         return Err(CrewError {
             message: "Crew name is required.".to_string(),
-            form: CrewFormView::new("", form.members_count, status),
+            form: CrewFormView::new("", status),
         });
     }
 
-    if form.members_count < 0 {
-        return Err(CrewError {
-            message: "Members count must be zero or more.".to_string(),
-            form: CrewFormView::new(name, form.members_count, status),
-        });
-    }
-
-    if let Err(err) =
-        crew_repo::update_crew(db, tenant_id, crew_id, &name, form.members_count, &status).await
-    {
+    if let Err(err) = crew_repo::update_crew(db, tenant_id, crew_id, &name, &status).await {
         return Err(CrewError {
             message: format!("Unable to update crew: {err}"),
-            form: CrewFormView::new(name, form.members_count, status),
+            form: CrewFormView::new(name, status),
         });
     }
 

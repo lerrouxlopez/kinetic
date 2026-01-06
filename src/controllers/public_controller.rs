@@ -26,6 +26,7 @@ use crate::services::{
     client_service,
     crew_service,
     deployment_service,
+    invoice_service,
     email_service,
     tracking_service,
     workspace_service,
@@ -77,13 +78,29 @@ async fn workspace_user(
 pub async fn index(cookies: &CookieJar<'_>, db: &Db) -> Result<Redirect, Template> {
     match current_user_from_cookies(cookies, db).await {
         Some(user) => Ok(Redirect::to(uri!(dashboard(slug = user.tenant_slug)))),
-        None => Err(Template::render(
-            "index",
-            context! {
-                title: "Kinetic",
-                current_user: Option::<CurrentUserView>::None,
-            },
-        )),
+        None => {
+            let appointments_total = appointment_service::count_appointments_all(db)
+                .await
+                .unwrap_or(0);
+            let workspaces_total = workspace_service::count_workspaces(db).await.unwrap_or(0);
+            let active_crews_total = crew_service::count_active_crews_all(db)
+                .await
+                .unwrap_or(0);
+            let deployments_total = deployment_service::count_deployments_all(db)
+                .await
+                .unwrap_or(0);
+            Err(Template::render(
+                "index",
+                context! {
+                    title: "Kinetic",
+                    current_user: Option::<CurrentUserView>::None,
+                    appointments_total: appointments_total,
+                    workspaces_total: workspaces_total,
+                    active_crews_total: active_crews_total,
+                    deployments_total: deployments_total,
+                },
+            ))
+        }
     }
 }
 
@@ -98,7 +115,7 @@ pub async fn register_form(cookies: &CookieJar<'_>, db: &Db) -> Template {
             title: "Create your workspace",
             current_user: current_user,
             error: Option::<String>::None,
-            form: RegisterView::new("", "", ""),
+            form: RegisterView::new("", ""),
         },
     )
 }
@@ -267,6 +284,12 @@ pub async fn dashboard(
     let can_view_tracking = access_service::can_view(db, &user, "tracking").await;
     let can_view_invoices = access_service::can_view(db, &user, "invoices").await;
     let can_view_settings = access_service::can_view(db, &user, "settings").await;
+    let is_owner = access_service::is_owner(&user.role);
+    let is_admin = access_service::is_admin(&user.role);
+    let is_sales = access_service::is_sales(&user.role);
+    let is_accounting = access_service::is_accounting(&user.role);
+    let is_employee = access_service::is_employee(&user.role);
+    let is_operations = access_service::is_operations(&user.role);
     let clients_total = if can_view_clients {
         client_service::count_clients(db, user.tenant_id)
             .await
@@ -274,7 +297,7 @@ pub async fn dashboard(
     } else {
         0
     };
-    let crew_ids = if can_view_deployments && access_service::is_employee(&user.role) {
+    let crew_ids = if can_view_deployments && is_employee {
         crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
             .await
             .unwrap_or_default()
@@ -282,7 +305,7 @@ pub async fn dashboard(
         Vec::new()
     };
     let deployments_total = if can_view_deployments {
-        if access_service::is_employee(&user.role) {
+        if is_employee {
             deployment_service::count_deployments_for_crews(db, user.tenant_id, &crew_ids)
                 .await
                 .unwrap_or(0)
@@ -300,7 +323,7 @@ pub async fn dashboard(
         0
     };
     let deployment_status_counts = if can_view_deployments {
-        if access_service::is_employee(&user.role) {
+        if is_employee {
             deployment_service::count_deployments_by_status_for_crews(
                 db,
                 user.tenant_id,
@@ -407,6 +430,62 @@ pub async fn dashboard(
             }
         })
         .collect::<Vec<_>>();
+    let invoice_total = if can_view_invoices {
+        invoice_service::count_invoices(db, user.tenant_id)
+            .await
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let invoice_status_counts = if can_view_invoices {
+        invoice_service::count_invoices_by_status(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let invoice_draft_total = invoice_status_counts
+        .iter()
+        .find(|(label, _)| label.eq_ignore_ascii_case("Draft"))
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+    let invoice_sent_total = invoice_status_counts
+        .iter()
+        .find(|(label, _)| label.eq_ignore_ascii_case("Sent"))
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+    let invoice_paid_total = invoice_status_counts
+        .iter()
+        .find(|(label, _)| label.eq_ignore_ascii_case("Paid"))
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+    let invoice_status_chart = invoice_service::status_options()
+        .iter()
+        .map(|status| {
+            let count = invoice_status_counts
+                .iter()
+                .find(|(label, _)| label.eq_ignore_ascii_case(status))
+                .map(|(_, count)| *count)
+                .unwrap_or(0);
+            let percent = if invoice_total > 0 {
+                ((count as f64 / invoice_total as f64) * 100.0).round() as i64
+            } else {
+                0
+            };
+            context! {
+                label: *status,
+                count: count,
+                percent: percent,
+            }
+        })
+        .collect::<Vec<_>>();
+    let tracking_reports_total = if is_employee {
+        tracking_service::count_updates_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or(0)
+    } else {
+        0
+    };
     let crew_stats = if can_view_crew {
         let crews = crew_service::list_crews(db, user.tenant_id)
             .await
@@ -453,6 +532,12 @@ pub async fn dashboard(
             can_view_tracking: can_view_tracking,
             can_view_invoices: can_view_invoices,
             can_view_settings: can_view_settings,
+            is_owner: is_owner,
+            is_admin: is_admin,
+            is_sales: is_sales,
+            is_accounting: is_accounting,
+            is_employee: is_employee,
+            is_operations: is_operations,
             clients_total: clients_total,
             deployments_total: deployments_total,
             crews_total: crews_total,
@@ -463,6 +548,12 @@ pub async fn dashboard(
             appointment_status_chart: appointment_status_chart,
             email_total: email_total,
             email_status_chart: email_status_chart,
+            invoice_total: invoice_total,
+            invoice_status_chart: invoice_status_chart,
+            invoice_draft_total: invoice_draft_total,
+            invoice_sent_total: invoice_sent_total,
+            invoice_paid_total: invoice_paid_total,
+            tracking_reports_total: tracking_reports_total,
         },
     ))
 }

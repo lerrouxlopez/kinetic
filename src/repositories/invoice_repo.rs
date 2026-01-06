@@ -271,3 +271,28 @@ pub async fn list_completed_deployments_without_invoice(
         })
         .collect())
 }
+
+pub async fn count_invoices(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM invoices WHERE tenant_id = ?")
+        .bind(tenant_id)
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
+pub async fn count_invoices_by_status(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT status, COUNT(*) as count FROM invoices WHERE tenant_id = ? GROUP BY status",
+    )
+    .bind(tenant_id)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("status"), row.get("count")))
+        .collect())
+}

@@ -220,7 +220,7 @@ pub async fn crew_new_form(
             title: "New crew",
             current_user: Some(current_user),
             error: Option::<String>::None,
-            form: CrewFormView::new("", 0, "Active"),
+            form: CrewFormView::new("", "Active"),
             status_options: crew_service::status_options(),
         },
     ))
@@ -315,7 +315,7 @@ pub async fn crew_edit_form(
             current_user: Some(current_user),
             error: Option::<String>::None,
             crew_id: crew.id,
-            form: CrewFormView::new(crew.name, crew.members_count, crew.status),
+            form: CrewFormView::new(crew.name, crew.status),
             status_options: crew_service::status_options(),
         },
     ))

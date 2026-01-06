@@ -58,6 +58,14 @@ pub async fn count_crews(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
     Ok(row.get("count"))
 }
 
+pub async fn count_crews_by_status(db: &Db, status: &str) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM crews WHERE status = ?")
+        .bind(status)
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn find_crew_by_id(
     db: &Db,
     tenant_id: i64,
@@ -84,7 +92,6 @@ pub async fn create_crew(
     db: &Db,
     tenant_id: i64,
     name: &str,
-    members_count: i64,
     status: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
@@ -92,7 +99,7 @@ pub async fn create_crew(
     )
     .bind(tenant_id)
     .bind(name)
-    .bind(members_count)
+    .bind(0)
     .bind(status)
     .execute(&db.0)
     .await?;
@@ -104,14 +111,12 @@ pub async fn update_crew(
     tenant_id: i64,
     crew_id: i64,
     name: &str,
-    members_count: i64,
     status: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE crews SET name = ?, members_count = ?, status = ? WHERE id = ? AND tenant_id = ?",
+        "UPDATE crews SET name = ?, status = ? WHERE id = ? AND tenant_id = ?",
     )
     .bind(name)
-    .bind(members_count)
     .bind(status)
     .bind(crew_id)
     .bind(tenant_id)

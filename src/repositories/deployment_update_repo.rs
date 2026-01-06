@@ -95,3 +95,33 @@ pub async fn create_update(
     .await?;
     Ok(())
 }
+
+pub async fn count_updates_for_crews(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<i64, sqlx::Error> {
+    if crew_ids.is_empty() {
+        return Ok(0);
+    }
+    let placeholders = crew_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        r#"
+        SELECT COUNT(*) as count
+        FROM deployment_updates
+        JOIN deployments ON deployment_updates.deployment_id = deployments.id
+        WHERE deployment_updates.tenant_id = ? AND deployments.crew_id IN ({})
+        "#,
+        placeholders
+    );
+    let mut query = sqlx::query(&sql).bind(tenant_id);
+    for crew_id in crew_ids {
+        query = query.bind(crew_id);
+    }
+    let row = query.fetch_one(&db.0).await?;
+    Ok(row.get("count"))
+}

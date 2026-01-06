@@ -17,6 +17,14 @@ pub async fn list_updates(
     deployment_update_repo::list_updates(db, tenant_id, deployment_id).await
 }
 
+pub async fn count_updates_for_crews(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<i64, sqlx::Error> {
+    deployment_update_repo::count_updates_for_crews(db, tenant_id, crew_ids).await
+}
+
 pub async fn create_update(
     db: &Db,
     tenant_id: i64,

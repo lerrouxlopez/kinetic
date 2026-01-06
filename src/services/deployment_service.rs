@@ -357,6 +357,10 @@ pub async fn count_deployments(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Err
     deployment_repo::count_deployments(db, tenant_id).await
 }
 
+pub async fn count_deployments_all(db: &Db) -> Result<i64, sqlx::Error> {
+    deployment_repo::count_deployments_total(db).await
+}
+
 pub async fn count_deployments_for_crews(
     db: &Db,
     tenant_id: i64,

@@ -34,16 +34,20 @@ pub async fn register(
     db: &Db,
     form: RegisterForm,
 ) -> Result<(User, i64), RegisterError> {
-    let slug = match normalize_slug(&form.tenant_slug) {
+    let tenant_name = form.tenant_name.trim().to_string();
+    if tenant_name.is_empty() {
+        return Err(RegisterError {
+            message: "Company name is required.".to_string(),
+            form: RegisterView::new(tenant_name, form.email),
+        });
+    }
+
+    let slug = match normalize_slug(&tenant_name) {
         Some(slug) => slug,
         None => {
             return Err(RegisterError {
-                message: "Workspace slug must be lowercase letters, numbers, or dashes.".to_string(),
-                form: RegisterView::new(
-                    form.tenant_slug,
-                    form.tenant_name.unwrap_or_default(),
-                    form.email,
-                ),
+                message: "Company name must be letters, numbers, or dashes.".to_string(),
+                form: RegisterView::new(tenant_name, form.email),
             })
         }
     };
@@ -51,14 +55,9 @@ pub async fn register(
     if form.password.trim().len() < 8 {
         return Err(RegisterError {
             message: "Password must be at least 8 characters.".to_string(),
-            form: RegisterView::new(slug, form.tenant_name.unwrap_or_default(), form.email),
+            form: RegisterView::new(tenant_name, form.email),
         });
     }
-
-    let tenant_name = form
-        .tenant_name
-        .clone()
-        .unwrap_or_else(|| slug.replace('-', " "));
 
     let tenant_id: i64 = match tenant_repo::find_tenant_id_by_slug(db, &slug).await {
         Ok(Some(id)) => id,
@@ -67,14 +66,14 @@ pub async fn register(
             Err(err) => {
                 return Err(RegisterError {
                     message: format!("Unable to create workspace: {err}"),
-                    form: RegisterView::new(slug, tenant_name, form.email),
+                    form: RegisterView::new(tenant_name, form.email),
                 })
             }
         },
         Err(_) => {
             return Err(RegisterError {
                 message: "Unable to check workspace.".to_string(),
-                form: RegisterView::new(slug, tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email),
             })
         }
     };
@@ -84,7 +83,7 @@ pub async fn register(
         Err(message) => {
             return Err(RegisterError {
                 message,
-                form: RegisterView::new(slug, tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email),
             })
         }
     };
@@ -100,7 +99,7 @@ pub async fn register(
     {
         return Err(RegisterError {
             message: format!("Unable to create user: {err}"),
-            form: RegisterView::new(slug, tenant_name, form.email),
+            form: RegisterView::new(tenant_name, form.email),
         });
     }
 
@@ -115,7 +114,7 @@ pub async fn register(
         _ => {
             return Err(RegisterError {
                 message: "User created, but could not load profile.".to_string(),
-                form: RegisterView::new(slug, tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email),
             })
         }
     };
@@ -133,7 +132,7 @@ pub async fn register_workspace_user(
         None => {
             return Err(RegisterError {
                 message: "Workspace slug must be lowercase letters, numbers, or dashes.".to_string(),
-                form: RegisterView::new(tenant_slug, "", form.email),
+                form: RegisterView::new("", form.email),
             })
         }
     };
@@ -141,7 +140,7 @@ pub async fn register_workspace_user(
     if form.password.trim().len() < 8 {
         return Err(RegisterError {
             message: "Password must be at least 8 characters.".to_string(),
-            form: RegisterView::new(slug, "", form.email),
+            form: RegisterView::new("", form.email),
         });
     }
 
@@ -150,7 +149,7 @@ pub async fn register_workspace_user(
         _ => {
             return Err(RegisterError {
                 message: "Workspace not found.".to_string(),
-                form: RegisterView::new(slug, "", form.email),
+                form: RegisterView::new("", form.email),
             })
         }
     };
@@ -160,7 +159,7 @@ pub async fn register_workspace_user(
         Err(message) => {
             return Err(RegisterError {
                 message,
-                form: RegisterView::new(slug, "", form.email),
+                form: RegisterView::new("", form.email),
             })
         }
     };
@@ -176,7 +175,7 @@ pub async fn register_workspace_user(
     {
         return Err(RegisterError {
             message: format!("Unable to create user: {err}"),
-            form: RegisterView::new(slug, "", form.email),
+            form: RegisterView::new("", form.email),
         });
     }
 
@@ -191,7 +190,7 @@ pub async fn register_workspace_user(
         _ => {
             return Err(RegisterError {
                 message: "User created, but could not load profile.".to_string(),
-                form: RegisterView::new(slug, "", form.email),
+                form: RegisterView::new("", form.email),
             })
         }
     };

@@ -120,6 +120,13 @@ pub async fn count_appointments(
     Ok(row.get("count"))
 }
 
+pub async fn count_appointments_total(db: &Db) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM appointments")
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn count_appointments_by_status(
     db: &Db,
     tenant_id: i64,

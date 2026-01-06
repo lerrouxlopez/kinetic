@@ -11,13 +11,9 @@
         {% endif %}
         <form class="mt-4" method="post" action="/register">
           <div class="mb-3">
-            <label class="form-label">Workspace slug</label>
-            <input class="form-control" name="tenant_slug" value="{{ form.tenant_slug }}" placeholder="acme-ops" required>
-            <div class="form-text text-muted">Lowercase letters, numbers, and dashes.</div>
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Workspace name</label>
-            <input class="form-control" name="tenant_name" value="{{ form.tenant_name }}" placeholder="Acme Operations">
+            <label class="form-label">Company name</label>
+            <input class="form-control" name="tenant_name" value="{{ form.tenant_name }}" placeholder="Acme Operations" required>
+            <div class="form-text text-muted">We'll generate your workspace slug automatically.</div>
           </div>
           <div class="mb-3">
             <label class="form-label">Email</label>

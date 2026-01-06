@@ -3,10 +3,10 @@
 {% block content %}
   <div class="row align-items-center g-5">
     <div class="col-lg-6">
-      <p class="text-uppercase text-muted tracking-wide">Asset and manpower control</p>
+      <p class="text-uppercase text-muted tracking-wide">Client and manpower control</p>
       <h1 class="display-5 fw-bold">Operate every crew, tool, and project from one branded hub.</h1>
       <p class="lead text-muted mt-3">
-        Kinetic is a multi-tenant tracking workspace for teams that need inventory and people movement in sync.
+        Kinetic is a multi-tenant tracking workspace for teams that need projects and people movement in sync.
       </p>
       <div class="d-flex flex-wrap gap-3 mt-4">
         <a class="btn btn-primary btn-lg" href="/register">Create your workspace</a>
@@ -18,16 +18,20 @@
         <h5 class="mb-3">Kinetic snapshot</h5>
         <div class="d-grid gap-3">
           <div class="stat-tile">
-            <div class="stat-label">Assets checked out</div>
-            <div class="stat-value">128</div>
+            <div class="stat-label">Appointments created</div>
+            <div class="stat-value">{{ appointments_total }}</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-label">Workspaces</div>
+            <div class="stat-value">{{ workspaces_total }}</div>
           </div>
           <div class="stat-tile">
             <div class="stat-label">Active crews</div>
-            <div class="stat-value">14</div>
+            <div class="stat-value">{{ active_crews_total }}</div>
           </div>
           <div class="stat-tile">
-            <div class="stat-label">Project zones</div>
-            <div class="stat-value">9</div>
+            <div class="stat-label">Project Deployments</div>
+            <div class="stat-value">{{ deployments_total }}</div>
           </div>
         </div>
       </div>

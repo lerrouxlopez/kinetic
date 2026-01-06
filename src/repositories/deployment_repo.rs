@@ -273,6 +273,13 @@ pub async fn count_deployments(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Err
     Ok(row.get("count"))
 }
 
+pub async fn count_deployments_total(db: &Db) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM deployments")
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn count_deployments_for_crews(
     db: &Db,
     tenant_id: i64,

@@ -21,10 +21,6 @@
               <label class="form-label">Crew name</label>
               <input class="form-control" name="name" value="{{ form.name }}" placeholder="Northline Alpha" required>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Members count</label>
-              <input class="form-control" type="number" min="0" name="members_count" value="{{ form.members_count }}" required>
-            </div>
             <div class="mb-4">
               <label class="form-label">Status</label>
               <select class="form-select" name="status">
