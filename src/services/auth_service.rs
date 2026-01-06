@@ -1,6 +1,13 @@
 use rocket_db_pools::sqlx;
 
-use crate::models::{LoginForm, LoginView, RegisterForm, RegisterView, User};
+use crate::models::{
+    LoginForm,
+    LoginView,
+    RegisterForm,
+    RegisterView,
+    User,
+    WorkspaceRegisterForm,
+};
 use crate::repositories::{tenant_repo, user_repo};
 use crate::services::utils::{hash_password, normalize_slug, verify_password};
 use crate::Db;
@@ -87,6 +94,7 @@ pub async fn register(
         tenant_id,
         &form.email.trim().to_lowercase(),
         &password_hash,
+        "Owner",
     )
     .await
     {
@@ -113,6 +121,82 @@ pub async fn register(
     };
 
     Ok((user, tenant_id))
+}
+
+pub async fn register_workspace_user(
+    db: &Db,
+    tenant_slug: &str,
+    form: WorkspaceRegisterForm,
+) -> Result<User, RegisterError> {
+    let slug = match normalize_slug(tenant_slug) {
+        Some(slug) => slug,
+        None => {
+            return Err(RegisterError {
+                message: "Workspace slug must be lowercase letters, numbers, or dashes.".to_string(),
+                form: RegisterView::new(tenant_slug, "", form.email),
+            })
+        }
+    };
+
+    if form.password.trim().len() < 8 {
+        return Err(RegisterError {
+            message: "Password must be at least 8 characters.".to_string(),
+            form: RegisterView::new(slug, "", form.email),
+        });
+    }
+
+    let tenant_id: i64 = match tenant_repo::find_tenant_id_by_slug(db, &slug).await {
+        Ok(Some(id)) => id,
+        _ => {
+            return Err(RegisterError {
+                message: "Workspace not found.".to_string(),
+                form: RegisterView::new(slug, "", form.email),
+            })
+        }
+    };
+
+    let password_hash = match hash_password(&form.password) {
+        Ok(hash) => hash,
+        Err(message) => {
+            return Err(RegisterError {
+                message,
+                form: RegisterView::new(slug, "", form.email),
+            })
+        }
+    };
+
+    if let Err(err) = user_repo::create_user(
+        db,
+        tenant_id,
+        &form.email.trim().to_lowercase(),
+        &password_hash,
+        "Employee",
+    )
+    .await
+    {
+        return Err(RegisterError {
+            message: format!("Unable to create user: {err}"),
+            form: RegisterView::new(slug, "", form.email),
+        });
+    }
+
+    let user = match user_repo::find_user_by_email_and_tenant(
+        db,
+        &form.email.trim().to_lowercase(),
+        tenant_id,
+    )
+    .await
+    {
+        Ok(Some(user)) => user,
+        _ => {
+            return Err(RegisterError {
+                message: "User created, but could not load profile.".to_string(),
+                form: RegisterView::new(slug, "", form.email),
+            })
+        }
+    };
+
+    Ok(user)
 }
 
 pub async fn login(db: &Db, form: LoginForm) -> Result<User, LoginError> {

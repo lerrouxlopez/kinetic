@@ -10,7 +10,7 @@ pub async fn list_members(
 ) -> Result<Vec<CrewMember>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, crew_id, tenant_id, name, phone, email, position
+        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position
         FROM crew_members
         WHERE crew_id = ? AND tenant_id = ?
         ORDER BY id DESC
@@ -27,6 +27,7 @@ pub async fn list_members(
             id: row.get("id"),
             crew_id: row.get("crew_id"),
             tenant_id: row.get("tenant_id"),
+            user_id: row.get("user_id"),
             name: row.get("name"),
             phone: row.get("phone"),
             email: row.get("email"),
@@ -44,7 +45,7 @@ pub async fn list_members_paged(
 ) -> Result<Vec<CrewMember>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, crew_id, tenant_id, name, phone, email, position
+        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position
         FROM crew_members
         WHERE crew_id = ? AND tenant_id = ?
         ORDER BY id DESC
@@ -64,6 +65,7 @@ pub async fn list_members_paged(
             id: row.get("id"),
             crew_id: row.get("crew_id"),
             tenant_id: row.get("tenant_id"),
+            user_id: row.get("user_id"),
             name: row.get("name"),
             phone: row.get("phone"),
             email: row.get("email"),
@@ -95,7 +97,7 @@ pub async fn find_member_by_id(
 ) -> Result<Option<CrewMember>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT id, crew_id, tenant_id, name, phone, email, position
+        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position
         FROM crew_members
         WHERE id = ? AND crew_id = ? AND tenant_id = ?
         "#,
@@ -110,6 +112,7 @@ pub async fn find_member_by_id(
         id: row.get("id"),
         crew_id: row.get("crew_id"),
         tenant_id: row.get("tenant_id"),
+        user_id: row.get("user_id"),
         name: row.get("name"),
         phone: row.get("phone"),
         email: row.get("email"),
@@ -121,6 +124,7 @@ pub async fn create_member(
     db: &Db,
     tenant_id: i64,
     crew_id: i64,
+    user_id: Option<i64>,
     name: &str,
     phone: &str,
     email: &str,
@@ -128,12 +132,13 @@ pub async fn create_member(
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO crew_members (crew_id, tenant_id, name, phone, email, position)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO crew_members (crew_id, tenant_id, user_id, name, phone, email, position)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(crew_id)
     .bind(tenant_id)
+    .bind(user_id)
     .bind(name)
     .bind(phone)
     .bind(email)
@@ -148,6 +153,7 @@ pub async fn update_member(
     tenant_id: i64,
     crew_id: i64,
     member_id: i64,
+    user_id: Option<i64>,
     name: &str,
     phone: &str,
     email: &str,
@@ -156,10 +162,11 @@ pub async fn update_member(
     sqlx::query(
         r#"
         UPDATE crew_members
-        SET name = ?, phone = ?, email = ?, position = ?
+        SET user_id = ?, name = ?, phone = ?, email = ?, position = ?
         WHERE id = ? AND crew_id = ? AND tenant_id = ?
         "#,
     )
+    .bind(user_id)
     .bind(name)
     .bind(phone)
     .bind(email)
@@ -170,6 +177,29 @@ pub async fn update_member(
     .execute(&db.0)
     .await?;
     Ok(())
+}
+
+pub async fn list_crew_ids_for_user(
+    db: &Db,
+    tenant_id: i64,
+    user_id: i64,
+    email: &str,
+) -> Result<Vec<i64>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT crew_id
+        FROM crew_members
+        WHERE tenant_id = ?
+          AND (user_id = ? OR (user_id IS NULL AND lower(email) = lower(?)))
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(user_id)
+    .bind(email)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows.into_iter().map(|row| row.get("crew_id")).collect())
 }
 
 pub async fn delete_member(

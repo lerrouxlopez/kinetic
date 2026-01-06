@@ -41,6 +41,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             tenant_id INTEGER NOT NULL,
             email TEXT NOT NULL,
             password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'Owner',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE(tenant_id, email),
             FOREIGN KEY(tenant_id) REFERENCES tenants(id)
@@ -85,6 +86,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             crew_id INTEGER NOT NULL,
             tenant_id INTEGER NOT NULL,
+            user_id INTEGER,
             name TEXT NOT NULL,
             phone TEXT NOT NULL,
             email TEXT NOT NULL,
@@ -206,6 +208,24 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     .execute(&db.0)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS invoices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            deployment_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'Draft',
+            notes TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(tenant_id, deployment_id),
+            FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE deployments ADD COLUMN fee_per_hour REAL NOT NULL DEFAULT 0")
             .execute(&db.0)
@@ -235,8 +255,32 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     .execute(&db.0)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS user_permissions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            resource TEXT NOT NULL,
+            can_view INTEGER NOT NULL DEFAULT 0,
+            can_edit INTEGER NOT NULL DEFAULT 0,
+            can_delete INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(user_id, resource),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE clients ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'Owner'")
             .execute(&db.0)
             .await,
     );
@@ -342,6 +386,11 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     );
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE client_contacts ADD COLUMN position TEXT NOT NULL DEFAULT ''")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE crew_members ADD COLUMN user_id INTEGER")
             .execute(&db.0)
             .await,
     );

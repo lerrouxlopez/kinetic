@@ -14,83 +14,216 @@
             <i class="bi bi-speedometer2"></i>
             Dashboard
           </a>
-          <a class="nav-link" href="/{{ tenant_slug }}/clients">
-            <i class="bi bi-building"></i>
-            Clients
-          </a>
-          <a class="nav-link" href="/{{ tenant_slug }}/crew">
-            <i class="bi bi-people"></i>
-            Roster
-          </a>
-          <a class="nav-link" href="/{{ tenant_slug }}/deployments">
-            <i class="bi bi-diagram-3"></i>
-            Deployments
-          </a>
-          <a class="nav-link" href="/{{ tenant_slug }}/tracking">
-            <i class="bi bi-geo"></i>
-            Tracking
-          </a>
-          <a class="nav-link" href="/{{ tenant_slug }}/invoices">
-            <i class="bi bi-receipt"></i>
-            Invoices
-          </a>
-          <a class="nav-link" href="/{{ tenant_slug }}/settings">
-            <i class="bi bi-gear"></i>
-            Settings
-          </a>
+          {% if can_view_clients %}
+            <a class="nav-link" href="/{{ tenant_slug }}/clients">
+              <i class="bi bi-building"></i>
+              Clients
+            </a>
+          {% endif %}
+          {% if can_view_crew %}
+            <a class="nav-link" href="/{{ tenant_slug }}/crew">
+              <i class="bi bi-people"></i>
+              Roster
+            </a>
+          {% endif %}
+          {% if can_view_deployments %}
+            <a class="nav-link" href="/{{ tenant_slug }}/deployments">
+              <i class="bi bi-diagram-3"></i>
+              Deployments
+            </a>
+          {% endif %}
+          {% if can_view_tracking %}
+            <a class="nav-link" href="/{{ tenant_slug }}/tracking">
+              <i class="bi bi-geo"></i>
+              Tracking
+            </a>
+          {% endif %}
+          {% if can_view_invoices %}
+            <a class="nav-link" href="/{{ tenant_slug }}/invoices">
+              <i class="bi bi-receipt"></i>
+              Invoices
+            </a>
+          {% endif %}
+          {% if can_view_settings %}
+            <a class="nav-link" href="/{{ tenant_slug }}/settings">
+              <i class="bi bi-gear"></i>
+              Settings
+            </a>
+          {% endif %}
         </nav>
       </aside>
       <section class="dashboard-main">
         <div class="card glass-card p-4">
-          <h2 class="h4 fw-bold">Operations overview</h2>
-          <p class="text-muted">Live stats across assets and manpower.</p>
+          <h2 class="h4 fw-bold">Live workspace stats</h2>
+          <p class="text-muted">Track clients, deployments, crews, and operations in real time.</p>
           <div class="row g-3 mt-3">
             <div class="col-md-4">
               <div class="stat-tile">
-                <div class="stat-label">Checked out</div>
-                <div class="stat-value">42</div>
+                <div class="stat-label">Clients</div>
+                <div class="stat-value">{{ clients_total }}</div>
+                {% if can_view_clients %}
+                  <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/clients">View clients</a>
+                {% endif %}
               </div>
             </div>
             <div class="col-md-4">
               <div class="stat-tile">
-                <div class="stat-label">On-site staff</div>
-                <div class="stat-value">18</div>
+                <div class="stat-label">Deployments</div>
+                <div class="stat-value">{{ deployments_total }}</div>
+                {% if can_view_deployments %}
+                  <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/deployments">View deployments</a>
+                {% endif %}
               </div>
             </div>
             <div class="col-md-4">
               <div class="stat-tile">
-                <div class="stat-label">Outstanding tasks</div>
-                <div class="stat-value">7</div>
+                <div class="stat-label">Crews</div>
+                <div class="stat-value">{{ crews_total }}</div>
+                {% if can_view_crew %}
+                  <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/crew">View roster</a>
+                {% endif %}
               </div>
             </div>
+            {% if can_view_clients %}
+              <div class="col-md-4">
+                <div class="stat-tile">
+                  <div class="stat-label">Appointments</div>
+                  <div class="stat-value">{{ appointment_total }}</div>
+                  <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/clients">View schedule</a>
+                </div>
+              </div>
+            {% endif %}
+            {% if can_view_settings %}
+              <div class="col-md-4">
+                <div class="stat-tile">
+                  <div class="stat-label">Outbound emails</div>
+                  <div class="stat-value">{{ email_total }}</div>
+                  <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/settings">Review email log</a>
+                </div>
+              </div>
+            {% endif %}
           </div>
         </div>
         <div class="row g-4 mt-1">
           <div class="col-lg-7">
             <div class="card glass-card p-4 h-100">
-              <h3 class="h5 fw-semibold">Asset utilization</h3>
-              <p class="text-muted">Weekly checkouts vs returns.</p>
-              <div class="graph-placeholder">
-                <div class="graph-line"></div>
-                <div class="graph-line line-2"></div>
-                <div class="graph-line line-3"></div>
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                  <h3 class="h5 fw-semibold mb-1">Deployments by status</h3>
+                  <p class="text-muted mb-0">Live breakdown across active work.</p>
+                </div>
+                <span class="text-muted small">{{ deployments_total }} total</span>
               </div>
+              {% if deployment_status_chart | length == 0 %}
+                <div class="text-muted">No deployment data available.</div>
+              {% else %}
+                <div class="d-flex flex-column gap-3">
+                  {% for status in deployment_status_chart %}
+                    <div>
+                      <div class="d-flex align-items-center justify-content-between">
+                        <div class="text-muted small">{{ status.label }}</div>
+                        <div class="text-muted small">{{ status.count }}</div>
+                      </div>
+                      <div class="progress mt-1" role="progressbar" aria-label="{{ status.label }} deployments" aria-valuenow="{{ status.percent }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar" style="width: {{ status.percent }}%"></div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+              {% endif %}
             </div>
           </div>
           <div class="col-lg-5">
             <div class="card glass-card p-4 h-100">
-              <h3 class="h5 fw-semibold">Crew allocation</h3>
-              <p class="text-muted">Shift coverage by zone.</p>
-              <div class="graph-placeholder donut">
-                <div class="donut-core">74%</div>
+              <div class="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                  <h3 class="h5 fw-semibold mb-1">Crew status</h3>
+                  <p class="text-muted mb-0">How the team is allocated.</p>
+                </div>
+                <span class="text-muted small">{{ crews_total }} crews</span>
               </div>
-              <div class="d-flex justify-content-between mt-3 text-muted small">
-                <span>North</span>
-                <span>East</span>
-                <span>South</span>
-              </div>
+              {% if crew_status_chart | length == 0 %}
+                <div class="text-muted">No crew data available.</div>
+              {% else %}
+                <div class="d-flex flex-column gap-3">
+                  {% for status in crew_status_chart %}
+                    <div>
+                      <div class="d-flex align-items-center justify-content-between">
+                        <div class="text-muted small">{{ status.label }}</div>
+                        <div class="text-muted small">{{ status.count }}</div>
+                      </div>
+                      <div class="progress mt-1" role="progressbar" aria-label="{{ status.label }} crews" aria-valuenow="{{ status.percent }}" aria-valuemin="0" aria-valuemax="100">
+                        <div class="progress-bar" style="width: {{ status.percent }}%"></div>
+                      </div>
+                    </div>
+                  {% endfor %}
+                </div>
+                <div class="text-muted small mt-3">Total members: {{ total_members }}</div>
+              {% endif %}
             </div>
           </div>
+        </div>
+        <div class="row g-4 mt-1">
+          {% if can_view_clients %}
+            <div class="col-lg-6">
+              <div class="card glass-card p-4 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                  <div>
+                    <h3 class="h5 fw-semibold mb-1">Appointments by status</h3>
+                    <p class="text-muted mb-0">Scheduled activity across clients.</p>
+                  </div>
+                  <span class="text-muted small">{{ appointment_total }} total</span>
+                </div>
+                {% if appointment_status_chart | length == 0 %}
+                  <div class="text-muted">No appointment data available.</div>
+                {% else %}
+                  <div class="d-flex flex-column gap-3">
+                    {% for status in appointment_status_chart %}
+                      <div>
+                        <div class="d-flex align-items-center justify-content-between">
+                          <div class="text-muted small">{{ status.label }}</div>
+                          <div class="text-muted small">{{ status.count }}</div>
+                        </div>
+                        <div class="progress mt-1" role="progressbar" aria-label="{{ status.label }} appointments" aria-valuenow="{{ status.percent }}" aria-valuemin="0" aria-valuemax="100">
+                          <div class="progress-bar" style="width: {{ status.percent }}%"></div>
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
+          {% if can_view_settings %}
+            <div class="col-lg-6">
+              <div class="card glass-card p-4 h-100">
+                <div class="d-flex align-items-center justify-content-between mb-3">
+                  <div>
+                    <h3 class="h5 fw-semibold mb-1">Outbound emails</h3>
+                    <p class="text-muted mb-0">Delivery performance snapshot.</p>
+                  </div>
+                  <span class="text-muted small">{{ email_total }} total</span>
+                </div>
+                {% if email_status_chart | length == 0 %}
+                  <div class="text-muted">No email activity available.</div>
+                {% else %}
+                  <div class="d-flex flex-column gap-3">
+                    {% for status in email_status_chart %}
+                      <div>
+                        <div class="d-flex align-items-center justify-content-between">
+                          <div class="text-muted small">{{ status.label }}</div>
+                          <div class="text-muted small">{{ status.count }}</div>
+                        </div>
+                        <div class="progress mt-1" role="progressbar" aria-label="{{ status.label }} emails" aria-valuenow="{{ status.percent }}" aria-valuemin="0" aria-valuemax="100">
+                          <div class="progress-bar" style="width: {{ status.percent }}%"></div>
+                        </div>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% endif %}
         </div>
       </section>
     </div>

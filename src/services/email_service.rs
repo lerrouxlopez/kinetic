@@ -2,6 +2,7 @@ use lettre::message::{header::ContentType, Mailbox, Message, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use rocket_db_pools::sqlx;
 
 use crate::models::EmailFormView;
 use crate::repositories::{email_repo, tenant_repo};
@@ -10,6 +11,20 @@ use crate::Db;
 pub struct EmailError {
     pub message: String,
     pub form: EmailFormView,
+}
+
+pub async fn count_outbound_emails(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<i64, sqlx::Error> {
+    email_repo::count_outbound_emails(db, tenant_id).await
+}
+
+pub async fn count_outbound_emails_by_status(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    email_repo::count_outbound_emails_by_status(db, tenant_id).await
 }
 
 pub async fn queue_email(

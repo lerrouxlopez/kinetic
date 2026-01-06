@@ -1,4 +1,5 @@
 use rocket_db_pools::sqlx;
+use rocket_db_pools::sqlx::Row;
 
 use crate::Db;
 
@@ -44,4 +45,32 @@ pub async fn update_outbound_email_status(
         .execute(&db.0)
         .await?;
     Ok(())
+}
+
+pub async fn count_outbound_emails(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM outbound_emails WHERE tenant_id = ?")
+        .bind(tenant_id)
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
+pub async fn count_outbound_emails_by_status(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT status, COUNT(*) as count FROM outbound_emails WHERE tenant_id = ? GROUP BY status",
+    )
+    .bind(tenant_id)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("status"), row.get("count")))
+        .collect())
 }

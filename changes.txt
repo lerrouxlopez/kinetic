@@ -143,11 +143,37 @@ the fee / hour in deployments is money so it should have a currency.
 The currency is set per client. so, add a currency field for the client (dropdown, pre-filled with all know currency) and display the currency in every where money is show. 
 in deployments for example, the fee column should have 1 USD if the currency is in USD for the client.
 
---
-
+---
+DONE
 The tracking page is used to track deployments.
 Here, the user can add updates and hours worked is calculated automatically
 when the user inputs the time started and finished.
 an update is required per work day.
 
 a user should be able to choose which deployment to show (dropdown, showing company, team very short summary) and see a list of updates for the deployment as well as a simple graph above the list to plot out the hours worked per day for the deployment.
+
+---
+DONE
+The invoice page shows a list of invoices for completed deployments. when clicking on a specific invoice on the list, it shows a printable and emailable invoice detailing the client, crew, total number of billable hours and reports of the deployments.
+
+when a deployment is marked as "completed" a notification on the invoice page should popup prompting the user to create an invoice.
+
+a CRUD should be created for invoices.
+
+---
+DONE
+A workspace should have users and roles. The default roles are:
+Owner
+Admin
+Sales
+Operations
+Accounting
+Employee
+
+create a registration page under the /workspace url that users can register but only for that workspace.
+
+in the settings page, create a new tab: "Users" move the email settings to an tab: "Email" .
+
+under the users tab, the Owner should be able to see a list of users for the workspace and configure which page a specific user can access, which list a user can edit/modify or delete.
+
+ie. an owner can do everything for the workspace, and admin has almost the same rights but cannot "delete" anything. An accounting user can only see invoices and etc.

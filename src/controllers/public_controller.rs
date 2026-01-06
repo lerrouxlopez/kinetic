@@ -13,13 +13,20 @@ use crate::models::{
     LoginView,
     RegisterForm,
     RegisterView,
+    UserPermissionForm,
+    WorkspaceRegisterForm,
+    WorkspaceRegisterView,
     WorkspaceEmailSettingsForm,
 };
+use crate::repositories::{crew_member_repo, user_repo};
 use crate::services::{
+    access_service,
     auth_service,
+    appointment_service,
     client_service,
     crew_service,
     deployment_service,
+    email_service,
     tracking_service,
     workspace_service,
 };
@@ -129,6 +136,65 @@ pub async fn register_submit(
     }
 }
 
+#[get("/<slug>/register")]
+pub async fn workspace_register_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+) -> Result<Template, Redirect> {
+    if current_user_from_cookies(cookies, db).await.is_some() {
+        return Err(Redirect::to(uri!(dashboard(slug = slug))));
+    }
+    Ok(Template::render(
+        "workspace/register",
+        context! {
+            title: "Join workspace",
+            current_user: Option::<CurrentUserView>::None,
+            tenant_slug: slug,
+            error: Option::<String>::None,
+            form: WorkspaceRegisterView::new(""),
+        },
+    ))
+}
+
+#[post("/<slug>/register", data = "<form>")]
+pub async fn workspace_register_submit(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    form: Form<WorkspaceRegisterForm>,
+) -> Result<Redirect, Template> {
+    if current_user_from_cookies(cookies, db).await.is_some() {
+        return Ok(Redirect::to(uri!(dashboard(slug = slug))));
+    }
+    let form = form.into_inner();
+    match auth_service::register_workspace_user(db, slug, form).await {
+        Ok(user) => {
+            cookies.add_private(
+                Cookie::build(("user_id", user.id.to_string()))
+                    .path("/")
+                    .build(),
+            );
+            cookies.add_private(
+                Cookie::build(("tenant_id", user.tenant_id.to_string()))
+                    .path("/")
+                    .build(),
+            );
+            Ok(Redirect::to(uri!(dashboard(slug = user.tenant_slug))))
+        }
+        Err(err) => Err(Template::render(
+            "workspace/register",
+            context! {
+                title: "Join workspace",
+                current_user: Option::<CurrentUserView>::None,
+                tenant_slug: slug,
+                error: err.message,
+                form: WorkspaceRegisterView::new(err.form.email),
+            },
+        )),
+    }
+}
+
 #[get("/login")]
 pub async fn login_form(cookies: &CookieJar<'_>, db: &Db) -> Template {
     let current_user = current_user_from_cookies(cookies, db)
@@ -192,6 +258,188 @@ pub async fn dashboard(
     slug: &str,
 ) -> Result<Template, Redirect> {
     let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_view(db, &user, "dashboard").await {
+        return Err(Redirect::to(uri!(login_form)));
+    }
+    let can_view_clients = access_service::can_view(db, &user, "clients").await;
+    let can_view_crew = access_service::can_view(db, &user, "crew").await;
+    let can_view_deployments = access_service::can_view(db, &user, "deployments").await;
+    let can_view_tracking = access_service::can_view(db, &user, "tracking").await;
+    let can_view_invoices = access_service::can_view(db, &user, "invoices").await;
+    let can_view_settings = access_service::can_view(db, &user, "settings").await;
+    let clients_total = if can_view_clients {
+        client_service::count_clients(db, user.tenant_id)
+            .await
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let crew_ids = if can_view_deployments && access_service::is_employee(&user.role) {
+        crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let deployments_total = if can_view_deployments {
+        if access_service::is_employee(&user.role) {
+            deployment_service::count_deployments_for_crews(db, user.tenant_id, &crew_ids)
+                .await
+                .unwrap_or(0)
+        } else {
+            deployment_service::count_deployments(db, user.tenant_id)
+                .await
+                .unwrap_or(0)
+        }
+    } else {
+        0
+    };
+    let crews_total = if can_view_crew {
+        crew_service::count_crews(db, user.tenant_id).await.unwrap_or(0)
+    } else {
+        0
+    };
+    let deployment_status_counts = if can_view_deployments {
+        if access_service::is_employee(&user.role) {
+            deployment_service::count_deployments_by_status_for_crews(
+                db,
+                user.tenant_id,
+                &crew_ids,
+            )
+            .await
+            .unwrap_or_default()
+        } else {
+            deployment_service::count_deployments_by_status(db, user.tenant_id)
+                .await
+                .unwrap_or_default()
+        }
+    } else {
+        Vec::new()
+    };
+    let deployment_statuses = ["Scheduled", "Active", "Completed", "Cancelled"];
+    let deployment_status_chart = deployment_statuses
+        .iter()
+        .map(|status| {
+            let count = deployment_status_counts
+                .iter()
+                .find(|(label, _)| label.eq_ignore_ascii_case(status))
+                .map(|(_, count)| *count)
+                .unwrap_or(0);
+            let percent = if deployments_total > 0 {
+                ((count as f64 / deployments_total as f64) * 100.0).round() as i64
+            } else {
+                0
+            };
+            context! {
+                label: *status,
+                count: count,
+                percent: percent,
+            }
+        })
+        .collect::<Vec<_>>();
+    let appointment_total = if can_view_clients {
+        appointment_service::count_appointments_total(db, user.tenant_id)
+            .await
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let appointment_status_counts = if can_view_clients {
+        appointment_service::count_appointments_by_status(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let appointment_statuses = ["Scheduled", "On Going", "Cancelled"];
+    let appointment_status_chart = appointment_statuses
+        .iter()
+        .map(|status| {
+            let count = appointment_status_counts
+                .iter()
+                .find(|(label, _)| label.eq_ignore_ascii_case(status))
+                .map(|(_, count)| *count)
+                .unwrap_or(0);
+            let percent = if appointment_total > 0 {
+                ((count as f64 / appointment_total as f64) * 100.0).round() as i64
+            } else {
+                0
+            };
+            context! {
+                label: *status,
+                count: count,
+                percent: percent,
+            }
+        })
+        .collect::<Vec<_>>();
+    let email_total = if can_view_settings {
+        email_service::count_outbound_emails(db, user.tenant_id)
+            .await
+            .unwrap_or(0)
+    } else {
+        0
+    };
+    let email_status_counts = if can_view_settings {
+        email_service::count_outbound_emails_by_status(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let email_statuses = ["Sent", "Queued", "Failed"];
+    let email_status_chart = email_statuses
+        .iter()
+        .map(|status| {
+            let count = email_status_counts
+                .iter()
+                .find(|(label, _)| label.eq_ignore_ascii_case(status))
+                .map(|(_, count)| *count)
+                .unwrap_or(0);
+            let percent = if email_total > 0 {
+                ((count as f64 / email_total as f64) * 100.0).round() as i64
+            } else {
+                0
+            };
+            context! {
+                label: *status,
+                count: count,
+                percent: percent,
+            }
+        })
+        .collect::<Vec<_>>();
+    let crew_stats = if can_view_crew {
+        let crews = crew_service::list_crews(db, user.tenant_id)
+            .await
+            .unwrap_or_default();
+        crew_service::stats_from_crews(&crews)
+    } else {
+        crate::models::CrewStats {
+            total_crews: 0,
+            active_crews: 0,
+            idle_crews: 0,
+            on_leave_crews: 0,
+            total_members: 0,
+        }
+    };
+    let crew_status_chart = [
+        ("Active", crew_stats.active_crews),
+        ("Idle", crew_stats.idle_crews),
+        ("On Leave", crew_stats.on_leave_crews),
+    ]
+    .iter()
+    .map(|(label, count)| {
+        let percent = if crew_stats.total_crews > 0 {
+            ((*count as f64 / crew_stats.total_crews as f64) * 100.0).round() as i64
+        } else {
+            0
+        };
+        context! {
+            label: *label,
+            count: *count,
+            percent: percent,
+        }
+    })
+    .collect::<Vec<_>>();
     Ok(Template::render(
         "dashboard",
         context! {
@@ -199,6 +447,22 @@ pub async fn dashboard(
             current_user: Some(CurrentUserView::from(&user)),
             tenant_slug: user.tenant_slug,
             email: user.email,
+            can_view_clients: can_view_clients,
+            can_view_crew: can_view_crew,
+            can_view_deployments: can_view_deployments,
+            can_view_tracking: can_view_tracking,
+            can_view_invoices: can_view_invoices,
+            can_view_settings: can_view_settings,
+            clients_total: clients_total,
+            deployments_total: deployments_total,
+            crews_total: crews_total,
+            deployment_status_chart: deployment_status_chart,
+            crew_status_chart: crew_status_chart,
+            total_members: crew_stats.total_members,
+            appointment_total: appointment_total,
+            appointment_status_chart: appointment_status_chart,
+            email_total: email_total,
+            email_status_chart: email_status_chart,
         },
     ))
 }
@@ -211,10 +475,25 @@ pub async fn tracking(
     deployment_id: Option<i64>,
 ) -> Result<Template, Redirect> {
     let user = workspace_user(cookies, db, slug).await?;
-    let deployments = deployment_service::list_deployments_for_select(db, user.tenant_id)
-        .await
-        .unwrap_or_default();
+    if !access_service::can_view(db, &user, "tracking").await {
+        return Err(Redirect::to(uri!(dashboard(slug = user.tenant_slug))));
+    }
+    let deployments = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+            .await
+            .unwrap_or_default();
+        deployment_service::list_deployments_for_select_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_for_select(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
+    let allowed_ids = deployments.iter().map(|item| item.id).collect::<Vec<_>>();
     let selected_deployment = deployment_id
+        .filter(|id| allowed_ids.contains(id))
         .or_else(|| deployments.first().map(|item| item.id))
         .filter(|id| *id > 0);
     let updates = match selected_deployment {
@@ -256,15 +535,58 @@ pub async fn tracking_update_create(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
     let form = form.into_inner();
-    let deployments = deployment_service::list_deployments_for_select(db, user.tenant_id)
-        .await
-        .unwrap_or_default();
+    let deployments = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+            .await
+            .unwrap_or_default();
+        deployment_service::list_deployments_for_select_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_for_select(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
     let selected_deployment = if form.deployment_id > 0 {
         Some(form.deployment_id)
     } else {
         deployments.first().map(|item| item.id)
     };
+
+    if access_service::is_employee(&user.role) {
+        let allowed_ids = deployments.iter().map(|item| item.id).collect::<Vec<_>>();
+        if let Some(deployment_id) = selected_deployment {
+            if !allowed_ids.contains(&deployment_id) {
+                return Err(Template::render(
+                    "tracking/index",
+                    context! {
+                        title: "Tracking",
+                        current_user: Some(CurrentUserView::from(&user)),
+                        deployments: deployments,
+                        selected_deployment: Option::<i64>::None,
+                        updates: Vec::<crate::models::DeploymentUpdate>::new(),
+                        chart_data: build_hours_chart(&[]),
+                        error: "You do not have access to that deployment.".to_string(),
+                        form: DeploymentUpdateFormView::new(
+                            0,
+                            "",
+                            "",
+                            "",
+                            "",
+                        ),
+                    },
+                ));
+            }
+        }
+    }
 
     match tracking_service::create_update(db, user.tenant_id, form).await {
         Ok(_) => Ok(Redirect::to(uri!(tracking(
@@ -372,29 +694,17 @@ fn build_hours_chart(updates: &[crate::models::DeploymentUpdate]) -> serde_json:
     })
 }
 
-#[get("/<slug>/invoices")]
-pub async fn invoices(
-    cookies: &CookieJar<'_>,
-    db: &Db,
-    slug: &str,
-) -> Result<Template, Redirect> {
-    let user = workspace_user(cookies, db, slug).await?;
-    Ok(Template::render(
-        "placeholders/invoices",
-        context! {
-            title: "Invoices",
-            current_user: Some(CurrentUserView::from(&user)),
-        },
-    ))
-}
-
-#[get("/<slug>/settings")]
+#[get("/<slug>/settings?<tab>")]
 pub async fn settings(
     cookies: &CookieJar<'_>,
     db: &Db,
     slug: &str,
+    tab: Option<String>,
 ) -> Result<Template, Redirect> {
     let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_view(db, &user, "settings").await {
+        return Err(Redirect::to(uri!(dashboard(slug = user.tenant_slug))));
+    }
     let workspace = workspace_service::find_workspace_by_id(db, user.tenant_id)
         .await
         .ok()
@@ -403,6 +713,55 @@ pub async fn settings(
         .as_ref()
         .map(workspace_service::workspace_email_settings_view)
         .unwrap_or_else(workspace_service::default_email_settings_view);
+    let is_owner = access_service::is_owner(&user.role);
+    let requested_tab = tab.unwrap_or_else(|| "email".to_string());
+    let active_tab = if !is_owner && requested_tab == "users" {
+        "email".to_string()
+    } else {
+        requested_tab
+    };
+    let mut users_context = Vec::new();
+    if is_owner {
+        let users = user_repo::list_users_by_tenant(db, user.tenant_id)
+            .await
+            .unwrap_or_default();
+        for user_entry in users {
+            let permissions = access_service::list_permissions_for_user(
+                db,
+                user.tenant_id,
+                user_entry.id,
+                &user_entry.role,
+            )
+            .await
+            .unwrap_or_default();
+            let permission_rows = access_service::RESOURCES
+                .iter()
+                .map(|(key, label)| {
+                    let match_perm = permissions.iter().find(|perm| perm.resource == *key);
+                    context! {
+                        key: *key,
+                        label: *label,
+                        can_view: match_perm.map(|perm| perm.can_view).unwrap_or(false),
+                        can_edit: match_perm.map(|perm| perm.can_edit).unwrap_or(false),
+                        can_delete: match_perm.map(|perm| perm.can_delete).unwrap_or(false),
+                    }
+                })
+                .collect::<Vec<_>>();
+            let is_owner_entry = user_entry.role.eq_ignore_ascii_case("Owner");
+            let role_name = if user_entry.role.trim().is_empty() {
+                "Owner".to_string()
+            } else {
+                user_entry.role.clone()
+            };
+            users_context.push(context! {
+                id: user_entry.id,
+                email: user_entry.email,
+                role: role_name,
+                is_owner: is_owner_entry,
+                permissions: permission_rows,
+            });
+        }
+    }
     Ok(Template::render(
         "placeholders/settings",
         context! {
@@ -411,6 +770,10 @@ pub async fn settings(
             error: Option::<String>::None,
             email_form: email_form,
             email_provider_options: workspace_service::email_provider_options(),
+            active_tab: active_tab,
+            is_owner: is_owner,
+            users: users_context,
+            role_options: access_service::role_options(),
         },
     ))
 }
@@ -426,9 +789,15 @@ pub async fn settings_email_update(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if !access_service::can_edit(db, &user, "settings").await {
+        return Ok(Redirect::to(uri!(settings(
+            slug = user.tenant_slug,
+            tab = Option::<String>::None
+        ))));
+    }
     let form = form.into_inner();
     match workspace_service::update_email_settings(db, user.tenant_id, form).await {
-        Ok(_) => Ok(Redirect::to(uri!(settings(slug = user.tenant_slug)))),
+        Ok(_) => Ok(Redirect::to(uri!(settings(slug = user.tenant_slug, tab = Option::<String>::None)))),
         Err(err) => Err(Template::render(
             "placeholders/settings",
             context! {
@@ -437,6 +806,10 @@ pub async fn settings_email_update(
                 error: err.message,
                 email_form: err.form,
                 email_provider_options: workspace_service::email_provider_options(),
+                active_tab: "email",
+                is_owner: access_service::is_owner(&user.role),
+                users: Vec::<serde_json::Value>::new(),
+                role_options: access_service::role_options(),
             },
         )),
     }
@@ -452,9 +825,15 @@ pub async fn settings_seed_demo(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if !access_service::can_edit(db, &user, "settings").await {
+        return Ok(Redirect::to(uri!(settings(
+            slug = user.tenant_slug,
+            tab = Option::<String>::None
+        ))));
+    }
 
     match workspace_service::seed_demo_data(db, user.tenant_id).await {
-        Ok(_) => Ok(Redirect::to(uri!(settings(slug = user.tenant_slug)))),
+        Ok(_) => Ok(Redirect::to(uri!(settings(slug = user.tenant_slug, tab = Option::<String>::None)))),
         Err(message) => {
             let workspace = workspace_service::find_workspace_by_id(db, user.tenant_id)
                 .await
@@ -472,10 +851,119 @@ pub async fn settings_seed_demo(
                     error: message,
                     email_form: email_form,
                     email_provider_options: workspace_service::email_provider_options(),
+                    active_tab: "email",
+                    is_owner: access_service::is_owner(&user.role),
+                    users: Vec::<serde_json::Value>::new(),
+                    role_options: access_service::role_options(),
                 },
             ))
         }
     }
+}
+
+#[post("/<slug>/settings/users/<user_id>", data = "<form>")]
+pub async fn settings_users_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    user_id: i64,
+    form: Form<UserPermissionForm>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::is_owner(&user.role) {
+        return Ok(Redirect::to(uri!(settings(
+            slug = user.tenant_slug,
+            tab = Option::<String>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let role = form.role.trim().to_string();
+    let role = match access_service::role_options()
+        .iter()
+        .find(|option| option.eq_ignore_ascii_case(&role))
+    {
+        Some(value) => value.to_string(),
+        None => {
+        return Err(Template::render(
+            "placeholders/settings",
+            context! {
+                title: "Settings",
+                current_user: Some(CurrentUserView::from(&user)),
+                error: "Invalid role selection.".to_string(),
+                email_form: workspace_service::default_email_settings_view(),
+                email_provider_options: workspace_service::email_provider_options(),
+                active_tab: "users",
+                is_owner: true,
+                users: Vec::<serde_json::Value>::new(),
+                role_options: access_service::role_options(),
+            },
+        ));
+        }
+    };
+    let selected = form.permissions.unwrap_or_default();
+    let permissions = access_service::RESOURCES
+        .iter()
+        .map(|(key, _)| {
+            let view_key = format!("{}:view", key);
+            let edit_key = format!("{}:edit", key);
+            let delete_key = format!("{}:delete", key);
+            crate::models::UserPermission {
+                resource: (*key).to_string(),
+                can_view: selected.contains(&view_key),
+                can_edit: selected.contains(&edit_key),
+                can_delete: selected.contains(&delete_key),
+            }
+        })
+        .collect::<Vec<_>>();
+
+    if let Err(err) = access_service::refresh_user_role(db, user.tenant_id, user_id, &role).await {
+        return Err(Template::render(
+            "placeholders/settings",
+            context! {
+                title: "Settings",
+                current_user: Some(CurrentUserView::from(&user)),
+                error: format!("Unable to update user role: {err}"),
+                email_form: workspace_service::default_email_settings_view(),
+                email_provider_options: workspace_service::email_provider_options(),
+                active_tab: "users",
+                is_owner: true,
+                users: Vec::<serde_json::Value>::new(),
+                role_options: access_service::role_options(),
+            },
+        ));
+    }
+
+    if let Err(err) = access_service::replace_permissions_for_user(
+        db,
+        user.tenant_id,
+        user_id,
+        &permissions,
+    )
+    .await
+    {
+        return Err(Template::render(
+            "placeholders/settings",
+            context! {
+                title: "Settings",
+                current_user: Some(CurrentUserView::from(&user)),
+                error: format!("Unable to update permissions: {err}"),
+                email_form: workspace_service::default_email_settings_view(),
+                email_provider_options: workspace_service::email_provider_options(),
+                active_tab: "users",
+                is_owner: true,
+                users: Vec::<serde_json::Value>::new(),
+                role_options: access_service::role_options(),
+            },
+        ));
+    }
+
+    Ok(Redirect::to(uri!(settings(
+        slug = user.tenant_slug,
+        tab = Some("users".to_string())
+    ))))
 }
 
 #[get("/<slug>/deployments")]
@@ -485,9 +973,22 @@ pub async fn deployments(
     slug: &str,
 ) -> Result<Template, Redirect> {
     let user = workspace_user(cookies, db, slug).await?;
-    let groups = deployment_service::list_deployments_grouped(db, user.tenant_id)
-        .await
-        .unwrap_or_default();
+    if !access_service::can_view(db, &user, "deployments").await {
+        return Err(Redirect::to(uri!(dashboard(slug = user.tenant_slug))));
+    }
+    let groups = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+            .await
+            .unwrap_or_default();
+        deployment_service::list_deployments_grouped_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_grouped(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
     let deployments = groups
         .into_iter()
         .map(|group| {
@@ -538,6 +1039,9 @@ pub async fn deployment_new_form(
     slug: &str,
 ) -> Result<Template, Redirect> {
     let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_edit(db, &user, "deployments").await {
+        return Err(Redirect::to(uri!(deployments(slug = user.tenant_slug))));
+    }
     let clients = client_service::list_clients(db, user.tenant_id)
         .await
         .unwrap_or_default();
@@ -569,6 +1073,9 @@ pub async fn deployment_create(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if !access_service::can_edit(db, &user, "deployments").await {
+        return Ok(Redirect::to(uri!(deployments(slug = user.tenant_slug))));
+    }
     let form = form.into_inner();
     let clients = client_service::list_clients(db, user.tenant_id)
         .await
@@ -602,6 +1109,9 @@ pub async fn deployment_edit_form(
     id: i64,
 ) -> Result<Template, Redirect> {
     let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_edit(db, &user, "deployments").await {
+        return Err(Redirect::to(uri!(deployments(slug = user.tenant_slug))));
+    }
     let deployment = match deployment_service::find_deployment_by_id(db, user.tenant_id, id).await {
         Ok(Some(deployment)) => deployment,
         _ => {
@@ -658,6 +1168,9 @@ pub async fn deployment_update(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if !access_service::can_edit(db, &user, "deployments").await {
+        return Ok(Redirect::to(uri!(deployments(slug = user.tenant_slug))));
+    }
     let form = form.into_inner();
     let clients = client_service::list_clients(db, user.tenant_id)
         .await
@@ -695,6 +1208,9 @@ pub async fn deployment_delete(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if !access_service::can_delete(db, &user, "deployments").await {
+        return Ok(Redirect::to(uri!(deployments(slug = user.tenant_slug))));
+    }
 
     if let Err(message) = deployment_service::delete_deployment(db, user.tenant_id, id).await {
         let groups = deployment_service::list_deployments_grouped(db, user.tenant_id)

@@ -19,7 +19,7 @@
           <img src="/static/logo.png" alt="Kinetic logo" class="brand-logo">
           <span class="brand-title">Kinetic</span>
         </a>
-        <div class="d-flex align-items-center gap-2">
+        <div class="d-flex align-items-center gap-2 navbar-actions">
           {% if current_user %}
             <span class="text-muted small">Workspace: {{ current_user.tenant_slug }}</span>
             <a class="btn btn-outline-light btn-sm" href="/{{ current_user.tenant_slug }}/dashboard">Dashboard</a>

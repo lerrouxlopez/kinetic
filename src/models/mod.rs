@@ -17,6 +17,12 @@ pub struct LoginForm {
 }
 
 #[derive(FromForm)]
+pub struct WorkspaceRegisterForm {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(FromForm)]
 pub struct AdminLoginForm {
     pub email: String,
     pub password: String,
@@ -57,9 +63,9 @@ pub struct CrewForm {
 
 #[derive(FromForm)]
 pub struct CrewMemberForm {
+    pub user_id: i64,
     pub name: String,
     pub phone: String,
-    pub email: String,
     pub position: String,
 }
 
@@ -114,9 +120,22 @@ pub struct DeploymentUpdateForm {
 }
 
 #[derive(FromForm)]
+pub struct InvoiceForm {
+    pub deployment_id: i64,
+    pub status: String,
+    pub notes: String,
+}
+
+#[derive(FromForm)]
 pub struct EmailForm {
     pub subject: String,
     pub body: String,
+}
+
+#[derive(FromForm)]
+pub struct UserPermissionForm {
+    pub role: String,
+    pub permissions: Option<Vec<String>>,
 }
 
 pub struct User {
@@ -124,6 +143,7 @@ pub struct User {
     pub tenant_id: i64,
     pub tenant_slug: String,
     pub email: String,
+    pub role: String,
 }
 
 pub struct AdminUser {
@@ -173,6 +193,7 @@ pub struct CrewMember {
     pub id: i64,
     pub crew_id: i64,
     pub tenant_id: i64,
+    pub user_id: Option<i64>,
     pub name: String,
     pub phone: String,
     pub email: String,
@@ -257,6 +278,48 @@ pub struct DeploymentUpdate {
 }
 
 #[derive(Serialize, Clone)]
+pub struct Invoice {
+    pub id: i64,
+    pub tenant_id: i64,
+    pub deployment_id: i64,
+    pub status: String,
+    pub notes: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct InvoiceSummary {
+    pub id: i64,
+    pub deployment_id: i64,
+    pub status: String,
+    pub notes: String,
+    pub created_at: String,
+    pub client_id: i64,
+    pub client_name: String,
+    pub client_address: String,
+    pub client_email: String,
+    pub client_currency: String,
+    pub crew_id: i64,
+    pub crew_name: String,
+    pub start_at: String,
+    pub end_at: String,
+    pub fee_per_hour: f64,
+    pub total_hours: f64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct InvoiceCandidate {
+    pub deployment_id: i64,
+    pub client_name: String,
+    pub crew_name: String,
+    pub start_at: String,
+    pub end_at: String,
+    pub fee_per_hour: f64,
+    pub client_currency: String,
+    pub total_hours: f64,
+}
+
+#[derive(Serialize, Clone)]
 pub struct DeploymentSelect {
     pub id: i64,
     pub label: String,
@@ -308,9 +371,9 @@ pub struct CrewFormView {
 
 #[derive(Serialize, Clone)]
 pub struct CrewMemberFormView {
+    pub user_id: i64,
     pub name: String,
     pub phone: String,
-    pub email: String,
     pub position: String,
 }
 
@@ -365,6 +428,13 @@ pub struct DeploymentUpdateFormView {
 }
 
 #[derive(Serialize, Clone)]
+pub struct InvoiceFormView {
+    pub deployment_id: i64,
+    pub status: String,
+    pub notes: String,
+}
+
+#[derive(Serialize, Clone)]
 pub struct WorkspaceEmailSettingsView {
     pub email_provider: String,
     pub from_name: String,
@@ -388,6 +458,26 @@ pub struct WorkspaceEmailSettingsView {
 pub struct EmailFormView {
     pub subject: String,
     pub body: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct WorkspaceRegisterView {
+    pub email: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct UserSummary {
+    pub id: i64,
+    pub email: String,
+    pub role: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct UserPermission {
+    pub resource: String,
+    pub can_view: bool,
+    pub can_edit: bool,
+    pub can_delete: bool,
 }
 
 #[derive(Serialize)]
@@ -514,15 +604,15 @@ impl CrewFormView {
 
 impl CrewMemberFormView {
     pub fn new(
+        user_id: i64,
         name: impl Into<String>,
         phone: impl Into<String>,
-        email: impl Into<String>,
         position: impl Into<String>,
     ) -> Self {
         CrewMemberFormView {
+            user_id,
             name: name.into(),
             phone: phone.into(),
-            email: email.into(),
             position: position.into(),
         }
     }
@@ -627,11 +717,33 @@ impl DeploymentUpdateFormView {
         }
     }
 }
+
+impl InvoiceFormView {
+    pub fn new(
+        deployment_id: i64,
+        status: impl Into<String>,
+        notes: impl Into<String>,
+    ) -> Self {
+        InvoiceFormView {
+            deployment_id,
+            status: status.into(),
+            notes: notes.into(),
+        }
+    }
+}
 impl EmailFormView {
     pub fn new(subject: impl Into<String>, body: impl Into<String>) -> Self {
         EmailFormView {
             subject: subject.into(),
             body: body.into(),
+        }
+    }
+}
+
+impl WorkspaceRegisterView {
+    pub fn new(email: impl Into<String>) -> Self {
+        WorkspaceRegisterView {
+            email: email.into(),
         }
     }
 }

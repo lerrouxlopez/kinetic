@@ -9,7 +9,7 @@ use crate::models::{
     CrewMemberFormView,
     CrewStats,
 };
-use crate::repositories::{crew_member_repo, crew_repo};
+use crate::repositories::{crew_member_repo, crew_repo, user_repo};
 use crate::Db;
 
 pub struct CrewError {
@@ -191,45 +191,54 @@ pub async fn create_member(
     if name.is_empty() {
         return Err(CrewMemberError {
             message: "Member name is required.".to_string(),
-            form: CrewMemberFormView::new("", form.phone, form.email, form.position),
-        });
-    }
-    let email = form.email.trim().to_string();
-    if email.is_empty() {
-        return Err(CrewMemberError {
-            message: "Member email is required.".to_string(),
-            form: CrewMemberFormView::new(name, form.phone, "", form.position),
+            form: CrewMemberFormView::new(form.user_id, "", form.phone, form.position),
         });
     }
     let phone = form.phone.trim().to_string();
     if phone.is_empty() {
         return Err(CrewMemberError {
             message: "Member phone is required.".to_string(),
-            form: CrewMemberFormView::new(name, "", email, form.position),
+            form: CrewMemberFormView::new(form.user_id, name, "", form.position),
         });
     }
+    if form.user_id <= 0 {
+        return Err(CrewMemberError {
+            message: "User account is required.".to_string(),
+            form: CrewMemberFormView::new(0, name, phone, form.position),
+        });
+    }
+    let user = match user_repo::find_user_by_id(db, tenant_id, form.user_id).await {
+        Ok(Some(user)) => user,
+        _ => {
+            return Err(CrewMemberError {
+                message: "Selected user was not found.".to_string(),
+                form: CrewMemberFormView::new(form.user_id, name, phone, form.position),
+            })
+        }
+    };
 
     if let Err(err) = crew_member_repo::create_member(
         db,
         tenant_id,
         crew_id,
+        Some(user.id),
         &name,
         &phone,
-        &email,
+        &user.email,
         form.position.trim(),
     )
     .await
     {
         return Err(CrewMemberError {
             message: format!("Unable to create crew member: {err}"),
-            form: CrewMemberFormView::new(name, phone, email, form.position),
+            form: CrewMemberFormView::new(form.user_id, name, phone, form.position),
         });
     }
 
     if let Err(err) = crew_repo::update_members_count(db, tenant_id, crew_id).await {
         return Err(CrewMemberError {
             message: format!("Unable to update crew members count: {err}"),
-            form: CrewMemberFormView::new(name, phone, email, form.position),
+            form: CrewMemberFormView::new(form.user_id, name, phone, form.position),
         });
     }
 
@@ -247,39 +256,48 @@ pub async fn update_member(
     if name.is_empty() {
         return Err(CrewMemberError {
             message: "Member name is required.".to_string(),
-            form: CrewMemberFormView::new("", form.phone, form.email, form.position),
-        });
-    }
-    let email = form.email.trim().to_string();
-    if email.is_empty() {
-        return Err(CrewMemberError {
-            message: "Member email is required.".to_string(),
-            form: CrewMemberFormView::new(name, form.phone, "", form.position),
+            form: CrewMemberFormView::new(form.user_id, "", form.phone, form.position),
         });
     }
     let phone = form.phone.trim().to_string();
     if phone.is_empty() {
         return Err(CrewMemberError {
             message: "Member phone is required.".to_string(),
-            form: CrewMemberFormView::new(name, "", email, form.position),
+            form: CrewMemberFormView::new(form.user_id, name, "", form.position),
         });
     }
+    if form.user_id <= 0 {
+        return Err(CrewMemberError {
+            message: "User account is required.".to_string(),
+            form: CrewMemberFormView::new(0, name, phone, form.position),
+        });
+    }
+    let user = match user_repo::find_user_by_id(db, tenant_id, form.user_id).await {
+        Ok(Some(user)) => user,
+        _ => {
+            return Err(CrewMemberError {
+                message: "Selected user was not found.".to_string(),
+                form: CrewMemberFormView::new(form.user_id, name, phone, form.position),
+            })
+        }
+    };
 
     if let Err(err) = crew_member_repo::update_member(
         db,
         tenant_id,
         crew_id,
         member_id,
+        Some(user.id),
         &name,
         &phone,
-        &email,
+        &user.email,
         form.position.trim(),
     )
     .await
     {
         return Err(CrewMemberError {
             message: format!("Unable to update crew member: {err}"),
-            form: CrewMemberFormView::new(name, phone, email, form.position),
+            form: CrewMemberFormView::new(form.user_id, name, phone, form.position),
         });
     }
 

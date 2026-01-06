@@ -1,0 +1,29 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card glass-card p-4">
+        <h2 class="h4 fw-bold">Join workspace</h2>
+        <p class="text-muted">Create an account for {{ tenant_slug }}.</p>
+        {% if error %}
+          <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="/{{ tenant_slug }}/register">
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" type="email" name="email" value="{{ form.email }}" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input class="form-control" type="password" name="password" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit">Create account</button>
+        </form>
+        <div class="text-muted small mt-3">
+          Already have an account? <a href="/login">Log in</a>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock content %}

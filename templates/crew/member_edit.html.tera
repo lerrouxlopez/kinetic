@@ -23,8 +23,15 @@
             </div>
             <div class="row g-3">
               <div class="col-md-6">
-                <label class="form-label">Email</label>
-                <input class="form-control" type="email" name="email" value="{{ form.email }}" required>
+                <label class="form-label">User account</label>
+                <select class="form-select" name="user_id" required>
+                  <option value="0" {% if form.user_id == 0 %}selected{% endif %}>Select user</option>
+                  {% for user in users %}
+                    <option value="{{ user.id }}" {% if form.user_id == user.id %}selected{% endif %}>
+                      {{ user.email }} ({{ user.role }})
+                    </option>
+                  {% endfor %}
+                </select>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Phone</label>

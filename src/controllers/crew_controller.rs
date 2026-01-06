@@ -11,7 +11,8 @@ use crate::models::{
     CurrentUserView,
     PaginationView,
 };
-use crate::services::{auth_service, crew_service};
+use crate::services::{access_service, auth_service, crew_service};
+use crate::repositories::user_repo;
 use crate::Db;
 
 const PER_PAGE: usize = 10;
@@ -60,7 +61,7 @@ fn empty_members_pagination(slug: &str, crew_id: i64) -> PaginationView {
 async fn tenant_from_cookies(
     cookies: &CookieJar<'_>,
     db: &Db,
-) -> Option<(i64, CurrentUserView)> {
+) -> Option<(i64, crate::models::User)> {
     let user_id = cookies.get_private("user_id").and_then(|c| c.value().parse().ok());
     let tenant_id = cookies.get_private("tenant_id").and_then(|c| c.value().parse().ok());
     match (user_id, tenant_id) {
@@ -68,7 +69,7 @@ async fn tenant_from_cookies(
             .await
             .ok()
             .flatten()
-            .map(|user| (tenant_id, CurrentUserView::from(&user))),
+            .map(|user| (tenant_id, user)),
         _ => None,
     }
 }
@@ -80,14 +81,20 @@ pub async fn crew_index(
     slug: &str,
     page: Option<usize>,
 ) -> Result<Template, Redirect> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
         return Err(Redirect::to(uri!(crew_index(
             slug = current_user.tenant_slug,
             page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_view(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crate::controllers::public_controller::dashboard(
+            slug = current_user.tenant_slug
         ))));
     }
 
@@ -125,15 +132,21 @@ pub async fn crew_show(
     id: i64,
     members_page: Option<usize>,
 ) -> Result<Template, Redirect> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
         return Err(Redirect::to(uri!(crew_show(
             slug = current_user.tenant_slug,
             id = id,
             members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_view(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crate::controllers::public_controller::dashboard(
+            slug = current_user.tenant_slug
         ))));
     }
     let tenant_slug = current_user.tenant_slug.clone();
@@ -186,12 +199,19 @@ pub async fn crew_new_form(
     db: &Db,
     slug: &str,
 ) -> Result<Template, Redirect> {
-    let (_, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (_, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
         return Err(Redirect::to(uri!(crew_new_form(slug = current_user.tenant_slug))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
     }
 
     Ok(Template::render(
@@ -213,11 +233,18 @@ pub async fn crew_create(
     slug: &str,
     form: Form<CrewForm>,
 ) -> Result<Redirect, Template> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
         return Ok(Redirect::to(uri!(crew_index(
             slug = current_user.tenant_slug,
             page = Option::<usize>::None
@@ -249,12 +276,20 @@ pub async fn crew_edit_form(
     slug: &str,
     id: i64,
 ) -> Result<Template, Redirect> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
         return Err(Redirect::to(uri!(crew_edit_form(slug = current_user.tenant_slug, id = id))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
     }
 
     let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
@@ -293,14 +328,22 @@ pub async fn crew_member_new_form(
     slug: &str,
     id: i64,
 ) -> Result<Template, Redirect> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
         return Err(Redirect::to(uri!(crew_member_new_form(
             slug = current_user.tenant_slug,
             id = id
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
         ))));
     }
 
@@ -319,6 +362,9 @@ pub async fn crew_member_new_form(
             ))
         }
     };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
 
     Ok(Template::render(
         "crew/member_new",
@@ -327,7 +373,8 @@ pub async fn crew_member_new_form(
             current_user: Some(current_user),
             error: Option::<String>::None,
             crew: crew,
-            form: CrewMemberFormView::new("", "", "", ""),
+            form: CrewMemberFormView::new(0, "", "", ""),
+            users: users,
         },
     ))
 }
@@ -340,11 +387,19 @@ pub async fn crew_member_create(
     id: i64,
     form: Form<CrewMemberForm>,
 ) -> Result<Redirect, Template> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
         return Ok(Redirect::to(uri!(crew_show(
             slug = current_user.tenant_slug,
             id = id,
@@ -367,6 +422,9 @@ pub async fn crew_member_create(
             ))
         }
     };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
 
     match crew_service::create_member(db, tenant_id, id, form).await {
         Ok(_) => Ok(Redirect::to(uri!(crew_show(
@@ -382,6 +440,7 @@ pub async fn crew_member_create(
                 error: err.message,
                 crew: crew,
                 form: err.form,
+                users: users,
             },
         )),
     }
@@ -395,15 +454,23 @@ pub async fn crew_member_edit_form(
     id: i64,
     member_id: i64,
 ) -> Result<Template, Redirect> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
         return Err(Redirect::to(uri!(crew_member_edit_form(
             slug = current_user.tenant_slug,
             id = id,
             member_id = member_id
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
         ))));
     }
 
@@ -442,6 +509,19 @@ pub async fn crew_member_edit_form(
             ))
         }
     };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+    let selected_user_id = if let Some(user_id) = member.user_id {
+        user_id
+    } else {
+        user_repo::find_user_by_email_and_tenant(db, &member.email, tenant_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|user| user.id)
+            .unwrap_or(0)
+    };
 
     Ok(Template::render(
         "crew/member_edit",
@@ -452,11 +532,12 @@ pub async fn crew_member_edit_form(
             error: Option::<String>::None,
             member_id: member.id,
             form: CrewMemberFormView::new(
+                selected_user_id,
                 member.name,
                 member.phone,
-                member.email,
                 member.position,
             ),
+            users: users,
         },
     ))
 }
@@ -470,11 +551,19 @@ pub async fn crew_member_update(
     member_id: i64,
     form: Form<CrewMemberForm>,
 ) -> Result<Redirect, Template> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
         return Ok(Redirect::to(uri!(crew_show(
             slug = current_user.tenant_slug,
             id = id,
@@ -497,6 +586,9 @@ pub async fn crew_member_update(
             ))
         }
     };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
 
     match crew_service::update_member(db, tenant_id, id, member_id, form).await {
         Ok(_) => Ok(Redirect::to(uri!(crew_show(
@@ -513,6 +605,7 @@ pub async fn crew_member_update(
                 error: err.message,
                 member_id: member_id,
                 form: err.form,
+                users: users,
             },
         )),
     }
@@ -526,11 +619,19 @@ pub async fn crew_member_delete(
     id: i64,
     member_id: i64,
 ) -> Result<Redirect, Template> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_delete(db, &user, "crew").await {
         return Ok(Redirect::to(uri!(crew_show(
             slug = current_user.tenant_slug,
             id = id,
@@ -586,11 +687,18 @@ pub async fn crew_update(
     id: i64,
     form: Form<CrewForm>,
 ) -> Result<Redirect, Template> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
         return Ok(Redirect::to(uri!(crew_index(
             slug = current_user.tenant_slug,
             page = Option::<usize>::None
@@ -623,11 +731,18 @@ pub async fn crew_delete(
     slug: &str,
     id: i64,
 ) -> Result<Redirect, Template> {
-    let (tenant_id, current_user) = match tenant_from_cookies(cookies, db).await {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
         Some(data) => data,
         None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
     };
+    let current_user = CurrentUserView::from(&user);
     if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_index(
+            slug = current_user.tenant_slug,
+            page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_delete(db, &user, "crew").await {
         return Ok(Redirect::to(uri!(crew_index(
             slug = current_user.tenant_slug,
             page = Option::<usize>::None

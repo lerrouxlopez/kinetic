@@ -30,42 +30,7 @@ pub async fn list_deployments_grouped(
     tenant_id: i64,
 ) -> Result<Vec<DeploymentClientGroup>, sqlx::Error> {
     let rows = deployment_repo::list_deployments_with_names(db, tenant_id).await?;
-    let mut groups: Vec<DeploymentClientGroup> = Vec::new();
-
-    for row in rows {
-        if let Some(existing) = groups.iter_mut().find(|group| group.client_id == row.client_id)
-        {
-            existing.deployments.push(DeploymentSummary {
-                id: row.id,
-                crew_id: row.crew_id,
-                crew_name: row.crew_name,
-                start_at: row.start_at,
-                end_at: row.end_at,
-                fee_per_hour: row.fee_per_hour,
-                info: row.info,
-                status: row.status,
-            });
-            continue;
-        }
-
-        groups.push(DeploymentClientGroup {
-            client_id: row.client_id,
-            client_name: row.client_name,
-            client_currency: row.client_currency,
-            deployments: vec![DeploymentSummary {
-                id: row.id,
-                crew_id: row.crew_id,
-                crew_name: row.crew_name,
-                start_at: row.start_at,
-                end_at: row.end_at,
-                fee_per_hour: row.fee_per_hour,
-                info: row.info,
-                status: row.status,
-            }],
-        });
-    }
-
-    Ok(groups)
+    Ok(group_deployments(rows))
 }
 
 pub async fn list_deployments_for_select(
@@ -73,6 +38,32 @@ pub async fn list_deployments_for_select(
     tenant_id: i64,
 ) -> Result<Vec<DeploymentSelect>, sqlx::Error> {
     let rows = deployment_repo::list_deployments_with_names(db, tenant_id).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| DeploymentSelect {
+            id: row.id,
+            label: format!("{} - {}", row.client_name, row.crew_name),
+        })
+    .collect())
+}
+
+pub async fn list_deployments_grouped_for_crews(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<Vec<DeploymentClientGroup>, sqlx::Error> {
+    let rows = deployment_repo::list_deployments_with_names_for_crews(db, tenant_id, crew_ids)
+        .await?;
+    Ok(group_deployments(rows))
+}
+
+pub async fn list_deployments_for_select_for_crews(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<Vec<DeploymentSelect>, sqlx::Error> {
+    let rows = deployment_repo::list_deployments_with_names_for_crews(db, tenant_id, crew_ids)
+        .await?;
     Ok(rows
         .into_iter()
         .map(|row| DeploymentSelect {
@@ -362,6 +353,33 @@ pub async fn delete_deployment(
         .map_err(|err| format!("Unable to delete deployment: {err}"))
 }
 
+pub async fn count_deployments(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
+    deployment_repo::count_deployments(db, tenant_id).await
+}
+
+pub async fn count_deployments_for_crews(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<i64, sqlx::Error> {
+    deployment_repo::count_deployments_for_crews(db, tenant_id, crew_ids).await
+}
+
+pub async fn count_deployments_by_status(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    deployment_repo::count_deployments_by_status(db, tenant_id).await
+}
+
+pub async fn count_deployments_by_status_for_crews(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    deployment_repo::count_deployments_by_status_for_crews(db, tenant_id, crew_ids).await
+}
+
 fn normalize_status(input: String) -> String {
     let status = input.trim();
     for option in status_options() {
@@ -381,6 +399,45 @@ fn normalize_datetime(input: &str) -> String {
         return trimmed.replace('T', " ");
     }
     trimmed.to_string()
+}
+
+fn group_deployments(rows: Vec<deployment_repo::DeploymentRow>) -> Vec<DeploymentClientGroup> {
+    let mut groups: Vec<DeploymentClientGroup> = Vec::new();
+
+    for row in rows {
+        if let Some(existing) = groups.iter_mut().find(|group| group.client_id == row.client_id)
+        {
+            existing.deployments.push(DeploymentSummary {
+                id: row.id,
+                crew_id: row.crew_id,
+                crew_name: row.crew_name,
+                start_at: row.start_at,
+                end_at: row.end_at,
+                fee_per_hour: row.fee_per_hour,
+                info: row.info,
+                status: row.status,
+            });
+            continue;
+        }
+
+        groups.push(DeploymentClientGroup {
+            client_id: row.client_id,
+            client_name: row.client_name,
+            client_currency: row.client_currency,
+            deployments: vec![DeploymentSummary {
+                id: row.id,
+                crew_id: row.crew_id,
+                crew_name: row.crew_name,
+                start_at: row.start_at,
+                end_at: row.end_at,
+                fee_per_hour: row.fee_per_hour,
+                info: row.info,
+                status: row.status,
+            }],
+        });
+    }
+
+    groups
 }
 
 pub fn calculated_fee(start_at: &str, end_at: &str, fee_per_hour: f64) -> f64 {

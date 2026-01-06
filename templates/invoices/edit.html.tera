@@ -1,0 +1,45 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex align-items-start justify-content-between mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">Edit invoice</h2>
+        <p class="text-muted mb-0">Update status and notes for {{ invoice_number }}.</p>
+      </div>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}">Back to invoice</a>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card glass-card p-4">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}">
+            <input type="hidden" name="deployment_id" value="{{ form.deployment_id }}">
+            <div class="mb-3">
+              <label class="form-label">Deployment</label>
+              <div class="form-control-plaintext">
+                {{ invoice.client_name }} - {{ invoice.crew_name }} ({{ invoice.start_at }} to {{ invoice.end_at }})
+              </div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Status</label>
+              <select class="form-select" name="status" required>
+                {% for option in status_options %}
+                  <option value="{{ option }}" {% if form.status == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Notes</label>
+              <textarea class="form-control" name="notes" rows="4" placeholder="Optional notes for the client.">{{ form.notes }}</textarea>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Save invoice</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock content %}
