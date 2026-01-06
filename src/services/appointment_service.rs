@@ -61,6 +61,12 @@ pub async fn count_appointments_by_status(
     appointment_repo::count_appointments_by_status(db, tenant_id).await
 }
 
+pub async fn count_appointments_by_status_all(
+    db: &Db,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    appointment_repo::count_appointments_by_status_all(db).await
+}
+
 pub async fn find_appointment(
     db: &Db,
     tenant_id: i64,

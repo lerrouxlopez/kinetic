@@ -376,6 +376,12 @@ pub async fn count_deployments_by_status(
     deployment_repo::count_deployments_by_status(db, tenant_id).await
 }
 
+pub async fn count_deployments_by_status_all(
+    db: &Db,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    deployment_repo::count_deployments_by_status_all(db).await
+}
+
 pub async fn count_deployments_by_status_for_crews(
     db: &Db,
     tenant_id: i64,

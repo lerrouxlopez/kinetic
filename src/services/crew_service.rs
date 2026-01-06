@@ -34,6 +34,10 @@ pub async fn list_crews(db: &Db, tenant_id: i64) -> Result<Vec<Crew>, sqlx::Erro
     crew_repo::list_crews(db, tenant_id).await
 }
 
+pub async fn list_crews_all(db: &Db) -> Result<Vec<Crew>, sqlx::Error> {
+    crew_repo::list_crews_all(db).await
+}
+
 pub async fn list_crews_paged(
     db: &Db,
     tenant_id: i64,
@@ -45,6 +49,10 @@ pub async fn list_crews_paged(
 
 pub async fn count_crews(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
     crew_repo::count_crews(db, tenant_id).await
+}
+
+pub async fn count_crews_all(db: &Db) -> Result<i64, sqlx::Error> {
+    crew_repo::count_crews_all(db).await
 }
 
 pub async fn count_active_crews_all(db: &Db) -> Result<i64, sqlx::Error> {

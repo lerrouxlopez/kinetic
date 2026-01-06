@@ -57,7 +57,6 @@
           {% if current_user %}
             <span class="text-muted small">Workspace: {{ current_user.tenant_slug }}</span>
             <a class="btn btn-outline-light btn-sm" href="/{{ current_user.tenant_slug }}/dashboard">Dashboard</a>
-            <a class="btn btn-primary btn-sm" href="/logout">Log out</a>
           {% else %}
             <a class="btn btn-outline-light btn-sm" href="/login">Log in</a>
             <a class="btn btn-primary btn-sm" href="/register">Create workspace</a>

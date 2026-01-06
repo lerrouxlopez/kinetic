@@ -1,0 +1,49 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="d-flex align-items-center justify-content-between mb-4">
+    <div>
+      <h2 class="h4 fw-bold mb-1">New user</h2>
+      <p class="text-muted">Signed in as {{ admin_email }}.</p>
+    </div>
+    <a class="btn btn-outline-light" href="/admin/users">Back</a>
+  </div>
+  <div class="row justify-content-center">
+    <div class="col-lg-6">
+      <div class="card glass-card p-4">
+        {% if error %}
+          <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        <form method="post" action="/admin/users">
+          <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" name="email" value="{{ form.email }}" placeholder="name@company.com" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Role</label>
+            <select class="form-select" name="role" required>
+              {% for option in role_options %}
+                <option value="{{ option }}" {% if form.role == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Workspace</label>
+            <select class="form-select" name="tenant_id" required>
+              {% for workspace in workspaces %}
+                <option value="{{ workspace.id }}" {% if form.tenant_id == workspace.id %}selected{% endif %}>
+                  {{ workspace.name }} ({{ workspace.slug }})
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Password</label>
+            <input class="form-control" name="password" type="password" placeholder="Minimum 8 characters" required>
+          </div>
+          <button class="btn btn-primary w-100" type="submit">Create user</button>
+        </form>
+      </div>
+    </div>
+  </div>
+{% endblock content %}

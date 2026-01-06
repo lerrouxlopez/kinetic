@@ -128,7 +128,8 @@ pub async fn register_form(cookies: &CookieJar<'_>, db: &Db) -> Template {
             title: "Create your workspace",
             current_user: current_user,
             error: Option::<String>::None,
-            form: RegisterView::new("", ""),
+            form: RegisterView::new("", "", "free"),
+            plan_options: workspace_service::plan_definitions(),
         },
     )
 }
@@ -161,6 +162,7 @@ pub async fn register_submit(
                 current_user: Option::<CurrentUserView>::None,
                 error: err.message,
                 form: err.form,
+                plan_options: workspace_service::plan_definitions(),
             },
         )),
     }
@@ -303,10 +305,15 @@ pub async fn dashboard(
     let is_accounting = access_service::is_accounting(&user.role);
     let is_employee = access_service::is_employee(&user.role);
     let is_operations = access_service::is_operations(&user.role);
+    let is_admin_workspace = user.tenant_slug == "admin" || user.is_super_admin;
     let clients_total = if can_view_clients {
-        client_service::count_clients(db, user.tenant_id)
-            .await
-            .unwrap_or(0)
+        if is_admin_workspace {
+            client_service::count_clients_all(db).await.unwrap_or(0)
+        } else {
+            client_service::count_clients(db, user.tenant_id)
+                .await
+                .unwrap_or(0)
+        }
     } else {
         0
     };
@@ -318,7 +325,11 @@ pub async fn dashboard(
         Vec::new()
     };
     let deployments_total = if can_view_deployments {
-        if is_employee {
+        if is_admin_workspace {
+            deployment_service::count_deployments_all(db)
+                .await
+                .unwrap_or(0)
+        } else if is_employee {
             deployment_service::count_deployments_for_crews(db, user.tenant_id, &crew_ids)
                 .await
                 .unwrap_or(0)
@@ -331,12 +342,20 @@ pub async fn dashboard(
         0
     };
     let crews_total = if can_view_crew {
-        crew_service::count_crews(db, user.tenant_id).await.unwrap_or(0)
+        if is_admin_workspace {
+            crew_service::count_crews_all(db).await.unwrap_or(0)
+        } else {
+            crew_service::count_crews(db, user.tenant_id).await.unwrap_or(0)
+        }
     } else {
         0
     };
     let deployment_status_counts = if can_view_deployments {
-        if is_employee {
+        if is_admin_workspace {
+            deployment_service::count_deployments_by_status_all(db)
+                .await
+                .unwrap_or_default()
+        } else if is_employee {
             deployment_service::count_deployments_by_status_for_crews(
                 db,
                 user.tenant_id,
@@ -374,16 +393,28 @@ pub async fn dashboard(
         })
         .collect::<Vec<_>>();
     let appointment_total = if can_view_clients {
-        appointment_service::count_appointments_total(db, user.tenant_id)
-            .await
-            .unwrap_or(0)
+        if is_admin_workspace {
+            appointment_service::count_appointments_all(db)
+                .await
+                .unwrap_or(0)
+        } else {
+            appointment_service::count_appointments_total(db, user.tenant_id)
+                .await
+                .unwrap_or(0)
+        }
     } else {
         0
     };
     let appointment_status_counts = if can_view_clients {
-        appointment_service::count_appointments_by_status(db, user.tenant_id)
-            .await
-            .unwrap_or_default()
+        if is_admin_workspace {
+            appointment_service::count_appointments_by_status_all(db)
+                .await
+                .unwrap_or_default()
+        } else {
+            appointment_service::count_appointments_by_status(db, user.tenant_id)
+                .await
+                .unwrap_or_default()
+        }
     } else {
         Vec::new()
     };
@@ -409,16 +440,28 @@ pub async fn dashboard(
         })
         .collect::<Vec<_>>();
     let email_total = if can_view_settings {
-        email_service::count_outbound_emails(db, user.tenant_id)
-            .await
-            .unwrap_or(0)
+        if is_admin_workspace {
+            email_service::count_outbound_emails_all(db)
+                .await
+                .unwrap_or(0)
+        } else {
+            email_service::count_outbound_emails(db, user.tenant_id)
+                .await
+                .unwrap_or(0)
+        }
     } else {
         0
     };
     let email_status_counts = if can_view_settings {
-        email_service::count_outbound_emails_by_status(db, user.tenant_id)
-            .await
-            .unwrap_or_default()
+        if is_admin_workspace {
+            email_service::count_outbound_emails_by_status_all(db)
+                .await
+                .unwrap_or_default()
+        } else {
+            email_service::count_outbound_emails_by_status(db, user.tenant_id)
+                .await
+                .unwrap_or_default()
+        }
     } else {
         Vec::new()
     };
@@ -444,16 +487,28 @@ pub async fn dashboard(
         })
         .collect::<Vec<_>>();
     let invoice_total = if can_view_invoices {
-        invoice_service::count_invoices(db, user.tenant_id)
-            .await
-            .unwrap_or(0)
+        if is_admin_workspace {
+            invoice_service::count_invoices_all(db)
+                .await
+                .unwrap_or(0)
+        } else {
+            invoice_service::count_invoices(db, user.tenant_id)
+                .await
+                .unwrap_or(0)
+        }
     } else {
         0
     };
     let invoice_status_counts = if can_view_invoices {
-        invoice_service::count_invoices_by_status(db, user.tenant_id)
-            .await
-            .unwrap_or_default()
+        if is_admin_workspace {
+            invoice_service::count_invoices_by_status_all(db)
+                .await
+                .unwrap_or_default()
+        } else {
+            invoice_service::count_invoices_by_status(db, user.tenant_id)
+                .await
+                .unwrap_or_default()
+        }
     } else {
         Vec::new()
     };
@@ -500,9 +555,13 @@ pub async fn dashboard(
         0
     };
     let crew_stats = if can_view_crew {
-        let crews = crew_service::list_crews(db, user.tenant_id)
-            .await
-            .unwrap_or_default();
+        let crews = if is_admin_workspace {
+            crew_service::list_crews_all(db).await.unwrap_or_default()
+        } else {
+            crew_service::list_crews(db, user.tenant_id)
+                .await
+                .unwrap_or_default()
+        };
         crew_service::stats_from_crews(&crews)
     } else {
         crate::models::CrewStats {

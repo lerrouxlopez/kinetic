@@ -171,11 +171,21 @@ pub async fn count_invoices(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error>
     invoice_repo::count_invoices(db, tenant_id).await
 }
 
+pub async fn count_invoices_all(db: &Db) -> Result<i64, sqlx::Error> {
+    invoice_repo::count_invoices_total(db).await
+}
+
 pub async fn count_invoices_by_status(
     db: &Db,
     tenant_id: i64,
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
     invoice_repo::count_invoices_by_status(db, tenant_id).await
+}
+
+pub async fn count_invoices_by_status_all(
+    db: &Db,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    invoice_repo::count_invoices_by_status_all(db).await
 }
 
 fn normalize_status(input: String) -> String {

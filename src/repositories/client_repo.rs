@@ -81,6 +81,13 @@ pub async fn count_clients(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> 
     Ok(row.get("count"))
 }
 
+pub async fn count_clients_all(db: &Db) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM clients WHERE is_deleted = 0")
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn find_client_by_id(
     db: &Db,
     tenant_id: i64,

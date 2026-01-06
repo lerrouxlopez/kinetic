@@ -58,6 +58,13 @@ pub async fn count_outbound_emails(
     Ok(row.get("count"))
 }
 
+pub async fn count_outbound_emails_all(db: &Db) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM outbound_emails")
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn count_outbound_emails_by_status(
     db: &Db,
     tenant_id: i64,
@@ -68,6 +75,20 @@ pub async fn count_outbound_emails_by_status(
     .bind(tenant_id)
     .fetch_all(&db.0)
     .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("status"), row.get("count")))
+        .collect())
+}
+
+pub async fn count_outbound_emails_by_status_all(
+    db: &Db,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let rows =
+        sqlx::query("SELECT status, COUNT(*) as count FROM outbound_emails GROUP BY status")
+            .fetch_all(&db.0)
+            .await?;
 
     Ok(rows
         .into_iter()

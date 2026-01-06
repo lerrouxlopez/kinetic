@@ -10,45 +10,68 @@
           <p class="text-muted small mb-0">Signed in as {{ email }}</p>
         </div>
         <nav class="nav flex-column mt-4">
-          <a class="nav-link active" href="/{{ tenant_slug }}/dashboard">
-            <i class="bi bi-speedometer2"></i>
-            Dashboard
-          </a>
-          {% if can_view_clients %}
-            <a class="nav-link" href="/{{ tenant_slug }}/clients">
-              <i class="bi bi-building"></i>
-              Clients
+          {% if tenant_slug == "admin" %}
+            <a class="nav-link active" href="/admin/dashboard">
+              <i class="bi bi-speedometer2"></i>
+              Dashboard
             </a>
-          {% endif %}
-          {% if can_view_crew %}
-            <a class="nav-link" href="/{{ tenant_slug }}/crew">
+            <a class="nav-link" href="/admin/workspaces">
+              <i class="bi bi-grid"></i>
+              Workspaces
+            </a>
+            <a class="nav-link" href="/admin/users">
               <i class="bi bi-people"></i>
-              Roster
+              Users
             </a>
-          {% endif %}
-          {% if can_view_deployments %}
-            <a class="nav-link" href="/{{ tenant_slug }}/deployments">
-              <i class="bi bi-diagram-3"></i>
-              Deployments
+            <a class="nav-link" href="/admin/plans">
+              <i class="bi bi-clipboard-check"></i>
+              Plans
             </a>
-          {% endif %}
-          {% if can_view_tracking %}
-            <a class="nav-link" href="/{{ tenant_slug }}/tracking">
-              <i class="bi bi-geo"></i>
-              Tracking
-            </a>
-          {% endif %}
-          {% if can_view_invoices %}
-            <a class="nav-link" href="/{{ tenant_slug }}/invoices">
-              <i class="bi bi-receipt"></i>
-              Invoices
-            </a>
-          {% endif %}
-          {% if can_view_settings %}
-            <a class="nav-link" href="/{{ tenant_slug }}/settings">
+            <a class="nav-link" href="/admin/settings">
               <i class="bi bi-gear"></i>
               Settings
             </a>
+          {% else %}
+            <a class="nav-link active" href="/{{ tenant_slug }}/dashboard">
+              <i class="bi bi-speedometer2"></i>
+              Dashboard
+            </a>
+            {% if can_view_clients %}
+              <a class="nav-link" href="/{{ tenant_slug }}/clients">
+                <i class="bi bi-building"></i>
+                Clients
+              </a>
+            {% endif %}
+            {% if can_view_crew %}
+              <a class="nav-link" href="/{{ tenant_slug }}/crew">
+                <i class="bi bi-people"></i>
+                Roster
+              </a>
+            {% endif %}
+            {% if can_view_deployments %}
+              <a class="nav-link" href="/{{ tenant_slug }}/deployments">
+                <i class="bi bi-diagram-3"></i>
+                Deployments
+              </a>
+            {% endif %}
+            {% if can_view_tracking %}
+              <a class="nav-link" href="/{{ tenant_slug }}/tracking">
+                <i class="bi bi-geo"></i>
+                Tracking
+              </a>
+            {% endif %}
+            {% if can_view_invoices %}
+              <a class="nav-link" href="/{{ tenant_slug }}/invoices">
+                <i class="bi bi-receipt"></i>
+                Invoices
+              </a>
+            {% endif %}
+            {% if can_view_settings %}
+              <a class="nav-link" href="/{{ tenant_slug }}/settings">
+                <i class="bi bi-gear"></i>
+                Settings
+              </a>
+            {% endif %}
           {% endif %}
         </nav>
       </aside>

@@ -20,11 +20,21 @@ pub async fn count_outbound_emails(
     email_repo::count_outbound_emails(db, tenant_id).await
 }
 
+pub async fn count_outbound_emails_all(db: &Db) -> Result<i64, sqlx::Error> {
+    email_repo::count_outbound_emails_all(db).await
+}
+
 pub async fn count_outbound_emails_by_status(
     db: &Db,
     tenant_id: i64,
 ) -> Result<Vec<(String, i64)>, sqlx::Error> {
     email_repo::count_outbound_emails_by_status(db, tenant_id).await
+}
+
+pub async fn count_outbound_emails_by_status_all(
+    db: &Db,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    email_repo::count_outbound_emails_by_status_all(db).await
 }
 
 pub async fn queue_email(

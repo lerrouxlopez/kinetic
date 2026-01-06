@@ -27,7 +27,27 @@ pub async fn get_user_by_ids(
     user_id: i64,
     tenant_id: i64,
 ) -> Result<Option<User>, sqlx::Error> {
-    user_repo::find_user_by_ids(db, user_id, tenant_id).await
+    if let Some(user) = user_repo::find_user_by_ids(db, user_id, tenant_id).await? {
+        return Ok(Some(user));
+    }
+
+    let Some(user) = user_repo::find_user_by_id_any(db, user_id).await? else {
+        return Ok(None);
+    };
+    if !user.is_super_admin {
+        return Ok(None);
+    }
+
+    let workspace = match tenant_repo::find_workspace_by_id(db, tenant_id).await? {
+        Some(workspace) => workspace,
+        None => return Ok(None),
+    };
+
+    Ok(Some(User {
+        tenant_id: workspace.id,
+        tenant_slug: workspace.slug,
+        ..user
+    }))
 }
 
 pub async fn register(
@@ -38,7 +58,7 @@ pub async fn register(
     if tenant_name.is_empty() {
         return Err(RegisterError {
             message: "Company name is required.".to_string(),
-            form: RegisterView::new(tenant_name, form.email),
+            form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
         });
     }
 
@@ -47,7 +67,7 @@ pub async fn register(
         None => {
             return Err(RegisterError {
                 message: "Company name must be letters, numbers, or dashes.".to_string(),
-                form: RegisterView::new(tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
             })
         }
     };
@@ -55,25 +75,25 @@ pub async fn register(
     if form.password.trim().len() < 8 {
         return Err(RegisterError {
             message: "Password must be at least 8 characters.".to_string(),
-            form: RegisterView::new(tenant_name, form.email),
+            form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
         });
     }
 
     let tenant_id: i64 = match tenant_repo::find_tenant_id_by_slug(db, &slug).await {
         Ok(Some(id)) => id,
-        Ok(None) => match tenant_repo::create_tenant(db, &slug, &tenant_name).await {
+        Ok(None) => match tenant_repo::create_tenant(db, &slug, &tenant_name, &form.plan_key).await {
             Ok(id) => id,
             Err(err) => {
                 return Err(RegisterError {
                     message: format!("Unable to create workspace: {err}"),
-                    form: RegisterView::new(tenant_name, form.email),
+                    form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
                 })
             }
         },
         Err(_) => {
             return Err(RegisterError {
                 message: "Unable to check workspace.".to_string(),
-                form: RegisterView::new(tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
             })
         }
     };
@@ -83,7 +103,7 @@ pub async fn register(
         Err(message) => {
             return Err(RegisterError {
                 message,
-                form: RegisterView::new(tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
             })
         }
     };
@@ -99,7 +119,7 @@ pub async fn register(
     {
         return Err(RegisterError {
             message: format!("Unable to create user: {err}"),
-            form: RegisterView::new(tenant_name, form.email),
+            form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
         });
     }
 
@@ -114,7 +134,7 @@ pub async fn register(
         _ => {
             return Err(RegisterError {
                 message: "User created, but could not load profile.".to_string(),
-                form: RegisterView::new(tenant_name, form.email),
+                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
             })
         }
     };
@@ -132,7 +152,7 @@ pub async fn register_workspace_user(
         None => {
             return Err(RegisterError {
                 message: "Workspace slug must be lowercase letters, numbers, or dashes.".to_string(),
-                form: RegisterView::new("", form.email),
+                form: RegisterView::new("", form.email, "free"),
             })
         }
     };
@@ -140,7 +160,7 @@ pub async fn register_workspace_user(
     if form.password.trim().len() < 8 {
         return Err(RegisterError {
             message: "Password must be at least 8 characters.".to_string(),
-            form: RegisterView::new("", form.email),
+            form: RegisterView::new("", form.email, "free"),
         });
     }
 
@@ -149,7 +169,7 @@ pub async fn register_workspace_user(
         _ => {
             return Err(RegisterError {
                 message: "Workspace not found.".to_string(),
-                form: RegisterView::new("", form.email),
+                form: RegisterView::new("", form.email, "free"),
             })
         }
     };
@@ -159,7 +179,7 @@ pub async fn register_workspace_user(
         Err(message) => {
             return Err(RegisterError {
                 message,
-                form: RegisterView::new("", form.email),
+                form: RegisterView::new("", form.email, "free"),
             })
         }
     };
@@ -175,7 +195,7 @@ pub async fn register_workspace_user(
     {
         return Err(RegisterError {
             message: format!("Unable to create user: {err}"),
-            form: RegisterView::new("", form.email),
+            form: RegisterView::new("", form.email, "free"),
         });
     }
 
@@ -190,7 +210,7 @@ pub async fn register_workspace_user(
         _ => {
             return Err(RegisterError {
                 message: "User created, but could not load profile.".to_string(),
-                form: RegisterView::new("", form.email),
+                form: RegisterView::new("", form.email, "free"),
             })
         }
     };
@@ -217,12 +237,15 @@ pub async fn login(db: &Db, form: LoginForm) -> Result<User, LoginError> {
     .await
     {
         Ok(Some(auth)) => auth,
-        _ => {
-            return Err(LoginError {
-                message: "Invalid credentials.".to_string(),
-                form: LoginView::new(slug, form.email),
-            })
-        }
+        _ => match user_repo::find_super_admin_auth_by_email(db, &form.email.trim().to_lowercase()).await {
+            Ok(Some(auth)) => auth,
+            _ => {
+                return Err(LoginError {
+                    message: "Invalid credentials.".to_string(),
+                    form: LoginView::new(slug, form.email),
+                })
+            }
+        },
     };
 
     if let Err(message) = verify_password(&form.password, &auth.password_hash) {
@@ -232,5 +255,23 @@ pub async fn login(db: &Db, form: LoginForm) -> Result<User, LoginError> {
         });
     }
 
+    if auth.user.is_super_admin {
+        let tenant_id = match tenant_repo::find_tenant_id_by_slug(db, &slug).await {
+            Ok(Some(id)) => id,
+            _ => {
+                return Err(LoginError {
+                    message: "Workspace not found.".to_string(),
+                    form: LoginView::new(slug, form.email),
+                })
+            }
+        };
+
+        let mut user = auth.user;
+        user.tenant_id = tenant_id;
+        user.tenant_slug = slug;
+        return Ok(user);
+    }
+
     Ok(auth.user)
 }
+

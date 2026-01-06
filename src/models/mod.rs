@@ -7,6 +7,7 @@ pub struct RegisterForm {
     pub tenant_name: String,
     pub email: String,
     pub password: String,
+    pub plan_key: String,
 }
 
 #[derive(FromForm)]
@@ -29,9 +30,18 @@ pub struct AdminLoginForm {
 }
 
 #[derive(FromForm)]
+pub struct AdminUserForm {
+    pub tenant_id: i64,
+    pub email: String,
+    pub role: String,
+    pub password: Option<String>,
+}
+
+#[derive(FromForm)]
 pub struct WorkspaceForm {
     pub slug: String,
     pub name: String,
+    pub plan_key: String,
 }
 
 #[derive(FromForm)]
@@ -151,6 +161,7 @@ pub struct User {
     pub tenant_slug: String,
     pub email: String,
     pub role: String,
+    pub is_super_admin: bool,
 }
 
 pub struct AdminUser {
@@ -167,6 +178,8 @@ pub struct Workspace {
     pub logo_path: String,
     pub theme_key: String,
     pub background_hue: i64,
+    pub plan_key: String,
+    pub plan_started_at: String,
     pub email_provider: String,
     pub email_from_name: String,
     pub email_from_address: String,
@@ -353,6 +366,7 @@ pub struct AdminAuth {
 pub struct RegisterView {
     pub tenant_name: String,
     pub email: String,
+    pub plan_key: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -370,6 +384,7 @@ pub struct AdminLoginView {
 pub struct WorkspaceFormView {
     pub slug: String,
     pub name: String,
+    pub plan_key: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -510,6 +525,25 @@ pub struct UserSummary {
 }
 
 #[derive(Serialize, Clone)]
+pub struct AdminUserSummary {
+    pub id: i64,
+    pub tenant_id: i64,
+    pub tenant_slug: String,
+    pub tenant_name: String,
+    pub email: String,
+    pub role: String,
+    pub is_super_admin: bool,
+}
+
+#[derive(Serialize, Clone)]
+pub struct AdminUserFormView {
+    pub tenant_id: i64,
+    pub email: String,
+    pub role: String,
+    pub password: String,
+}
+
+#[derive(Serialize, Clone)]
 pub struct UserPermission {
     pub resource: String,
     pub can_view: bool,
@@ -555,10 +589,12 @@ impl RegisterView {
     pub fn new(
         tenant_name: impl Into<String>,
         email: impl Into<String>,
+        plan_key: impl Into<String>,
     ) -> Self {
         RegisterView {
             tenant_name: tenant_name.into(),
             email: email.into(),
+            plan_key: plan_key.into(),
         }
     }
 }
@@ -579,10 +615,11 @@ impl AdminLoginView {
 }
 
 impl WorkspaceFormView {
-    pub fn new(slug: impl Into<String>, name: impl Into<String>) -> Self {
+    pub fn new(slug: impl Into<String>, name: impl Into<String>, plan_key: impl Into<String>) -> Self {
         WorkspaceFormView {
             slug: slug.into(),
             name: name.into(),
+            plan_key: plan_key.into(),
         }
     }
 }
@@ -778,6 +815,22 @@ impl WorkspaceRegisterView {
     pub fn new(email: impl Into<String>) -> Self {
         WorkspaceRegisterView {
             email: email.into(),
+        }
+    }
+}
+
+impl AdminUserFormView {
+    pub fn new(
+        tenant_id: i64,
+        email: impl Into<String>,
+        role: impl Into<String>,
+        password: impl Into<String>,
+    ) -> Self {
+        AdminUserFormView {
+            tenant_id,
+            email: email.into(),
+            role: role.into(),
+            password: password.into(),
         }
     }
 }

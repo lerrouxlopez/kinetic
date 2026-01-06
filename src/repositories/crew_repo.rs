@@ -23,6 +23,25 @@ pub async fn list_crews(db: &Db, tenant_id: i64) -> Result<Vec<Crew>, sqlx::Erro
         .collect())
 }
 
+pub async fn list_crews_all(db: &Db) -> Result<Vec<Crew>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, tenant_id, name, members_count, status FROM crews ORDER BY id DESC",
+    )
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Crew {
+            id: row.get("id"),
+            tenant_id: row.get("tenant_id"),
+            name: row.get("name"),
+            members_count: row.get("members_count"),
+            status: row.get("status"),
+        })
+        .collect())
+}
+
 pub async fn list_crews_paged(
     db: &Db,
     tenant_id: i64,
@@ -53,6 +72,13 @@ pub async fn list_crews_paged(
 pub async fn count_crews(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> {
     let row = sqlx::query("SELECT COUNT(*) as count FROM crews WHERE tenant_id = ?")
         .bind(tenant_id)
+        .fetch_one(&db.0)
+        .await?;
+    Ok(row.get("count"))
+}
+
+pub async fn count_crews_all(db: &Db) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) as count FROM crews")
         .fetch_one(&db.0)
         .await?;
     Ok(row.get("count"))

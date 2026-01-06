@@ -10,6 +10,34 @@
           <div class="alert alert-danger mt-3">{{ error }}</div>
         {% endif %}
         <form class="mt-4" method="post" action="/register">
+          <div class="mb-4">
+            <label class="form-label">Choose a plan</label>
+            <div class="theme-grid">
+              {% for plan in plan_options %}
+                <label class="theme-card">
+                  <div class="theme-swatch" style="background: linear-gradient(135deg, var(--kinetic-primary), var(--kinetic-primary-dark));"></div>
+                  <div class="d-flex align-items-start justify-content-between">
+                    <div>
+                      <div class="theme-label">{{ plan.name }}</div>
+                      <div class="text-muted small">{{ plan.price }}</div>
+                    </div>
+                    <input type="radio" name="plan_key" value="{{ plan.key }}" {% if form.plan_key == plan.key %}checked{% endif %} required>
+                  </div>
+                  <div class="text-muted small">
+                    {% if plan.key == "free" %}
+                      No whitelabeling · 1 month limit
+                    {% elif plan.key == "pro" %}
+                      Whitelabeling · 6 month minimum
+                    {% else %}
+                      Unlimited · 1 year minimum
+                    {% endif %}
+                  </div>
+                  <div class="text-muted small">Payment link: <a href="{{ plan.payment_url }}" target="_blank" rel="noopener">Open</a></div>
+                  <div class="text-muted small">WISE QR: <a href="{{ plan.payment_qr_url }}" target="_blank" rel="noopener">View</a></div>
+                </label>
+              {% endfor %}
+            </div>
+          </div>
           <div class="mb-3">
             <label class="form-label">Company name</label>
             <input class="form-control" name="tenant_name" value="{{ form.tenant_name }}" placeholder="Acme Operations" required>

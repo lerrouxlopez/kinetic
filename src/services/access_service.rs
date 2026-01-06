@@ -96,6 +96,9 @@ pub async fn can_delete(db: &Db, user: &User, resource: &str) -> bool {
 }
 
 async fn can_action(db: &Db, user: &User, resource: &str, action: &str) -> bool {
+    if user.is_super_admin {
+        return true;
+    }
     let role = normalize_role(&user.role);
     if role.eq_ignore_ascii_case(ROLE_OWNER) {
         return true;

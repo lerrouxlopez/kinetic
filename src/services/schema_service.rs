@@ -1,7 +1,5 @@
 use rocket_db_pools::sqlx::{self, Row};
-use std::env;
-
-use crate::repositories::admin_repo;
+use crate::repositories::{tenant_repo, user_repo};
 use crate::services::utils::hash_password;
 use crate::Db;
 
@@ -16,6 +14,8 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
               logo_path TEXT NOT NULL DEFAULT '',
               theme_key TEXT NOT NULL DEFAULT 'kinetic',
               background_hue INTEGER NOT NULL DEFAULT 32,
+              plan_key TEXT NOT NULL DEFAULT 'free',
+              plan_started_at TEXT NOT NULL DEFAULT (datetime('now')),
               email_provider TEXT NOT NULL DEFAULT 'Mailtrap',
               email_from_name TEXT NOT NULL DEFAULT '',
               email_from_address TEXT NOT NULL DEFAULT '',
@@ -43,6 +43,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
+            is_super_admin INTEGER NOT NULL DEFAULT 0,
             email TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'Owner',
@@ -283,11 +284,16 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             .execute(&db.0)
             .await,
     );
-    ignore_duplicate_column(
-        sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'Owner'")
-            .execute(&db.0)
-            .await,
-    );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'Owner'")
+              .execute(&db.0)
+              .await,
+      );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE users ADD COLUMN is_super_admin INTEGER NOT NULL DEFAULT 0")
+              .execute(&db.0)
+              .await,
+      );
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE clients ADD COLUMN stage TEXT NOT NULL DEFAULT 'Proposal'")
             .execute(&db.0)
@@ -398,6 +404,18 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
               .execute(&db.0)
               .await,
       );
+      ignore_duplicate_column(
+          sqlx::query("ALTER TABLE tenants ADD COLUMN plan_key TEXT NOT NULL DEFAULT 'free'")
+              .execute(&db.0)
+              .await,
+      );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE tenants ADD COLUMN plan_started_at TEXT NOT NULL DEFAULT '1970-01-01 00:00:00'",
+        )
+        .execute(&db.0)
+        .await,
+    );
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE client_contacts ADD COLUMN is_rogue INTEGER NOT NULL DEFAULT 0")
             .execute(&db.0)
@@ -419,6 +437,12 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             .await,
     );
 
+    sqlx::query(
+        "UPDATE tenants SET plan_started_at = datetime('now') WHERE plan_started_at = '1970-01-01 00:00:00' OR plan_started_at = ''",
+    )
+    .execute(&db.0)
+    .await?;
+
     seed_admin(db).await?;
     seed_client_data(db).await?;
 
@@ -435,15 +459,23 @@ fn ignore_duplicate_column(result: Result<sqlx::sqlite::SqliteQueryResult, sqlx:
 }
 
 async fn seed_admin(db: &Db) -> Result<(), sqlx::Error> {
-    if admin_repo::any_admin_exists(db).await? {
+    let admin_slug = "admin";
+    let admin_name = "Admin workspace";
+    let admin_email = "admin@kinetic.app";
+    let admin_password = "Angelus69@@@";
+
+    let tenant_id = match tenant_repo::find_tenant_id_by_slug(db, admin_slug).await? {
+        Some(id) => id,
+        None => tenant_repo::create_tenant(db, admin_slug, admin_name, "enterprise").await?,
+    };
+
+    let existing = user_repo::find_super_admin_auth_by_email(db, admin_email).await?;
+    if existing.is_some() {
         return Ok(());
     }
 
-    let email = env::var("KINETIC_ADMIN_EMAIL").unwrap_or_else(|_| "admin@kinetic.local".to_string());
-    let password = env::var("KINETIC_ADMIN_PASSWORD").unwrap_or_else(|_| "ChangeMe123!".to_string());
-    let hash = hash_password(&password).map_err(|_| sqlx::Error::RowNotFound)?;
-
-    admin_repo::create_admin(db, &email.trim().to_lowercase(), &hash).await?;
+    let hash = hash_password(admin_password).map_err(|_| sqlx::Error::RowNotFound)?;
+    user_repo::create_super_admin(db, tenant_id, &admin_email.to_lowercase(), &hash).await?;
 
     Ok(())
 }

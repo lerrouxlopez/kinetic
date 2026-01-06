@@ -19,9 +19,19 @@
             <label class="form-label">Slug</label>
             <input class="form-control" name="slug" value="{{ form.slug }}" placeholder="north-division" required>
           </div>
-          <div class="mb-4">
+          <div class="mb-3">
             <label class="form-label">Name</label>
             <input class="form-control" name="name" value="{{ form.name }}" placeholder="North Division" required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label">Plan</label>
+            <select class="form-select" name="plan_key" required>
+              {% for plan in plan_options %}
+                <option value="{{ plan.key }}" {% if form.plan_key == plan.key %}selected{% endif %}>
+                  {{ plan.name }}
+                </option>
+              {% endfor %}
+            </select>
           </div>
           <button class="btn btn-primary w-100" type="submit">Create workspace</button>
         </form>

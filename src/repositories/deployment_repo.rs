@@ -322,6 +322,21 @@ pub async fn count_deployments_by_status(
         .collect())
 }
 
+pub async fn count_deployments_by_status_all(
+    db: &Db,
+) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT status, COUNT(*) as count FROM deployments GROUP BY status",
+    )
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("status"), row.get("count")))
+        .collect())
+}
+
 pub async fn count_deployments_by_status_for_crews(
     db: &Db,
     tenant_id: i64,

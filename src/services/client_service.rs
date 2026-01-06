@@ -53,6 +53,10 @@ pub async fn count_clients(db: &Db, tenant_id: i64) -> Result<i64, sqlx::Error> 
     client_repo::count_clients(db, tenant_id).await
 }
 
+pub async fn count_clients_all(db: &Db) -> Result<i64, sqlx::Error> {
+    client_repo::count_clients_all(db).await
+}
+
 pub async fn find_client_by_id(
     db: &Db,
     tenant_id: i64,

@@ -1,4 +1,5 @@
 use rocket_db_pools::sqlx::{self, Row};
+use serde::Serialize;
 
 use crate::models::{
     ThemeOption,
@@ -13,6 +14,7 @@ use crate::models::{
 use crate::repositories::tenant_repo;
 use crate::services::utils::normalize_slug;
 use crate::Db;
+use chrono::{Duration, NaiveDateTime, Utc};
 
 pub struct WorkspaceError {
     pub message: String,
@@ -27,6 +29,29 @@ pub struct WorkspaceEmailSettingsError {
 pub struct WorkspaceThemeError {
     pub message: String,
     pub form: WorkspaceThemeView,
+}
+
+#[derive(Serialize, Clone, Copy)]
+pub struct PlanLimits {
+    pub clients: Option<i64>,
+    pub contacts_per_client: Option<i64>,
+    pub appointments_per_client: Option<i64>,
+    pub deployments_per_client: Option<i64>,
+    pub crews: Option<i64>,
+    pub members_per_crew: Option<i64>,
+    pub users: Option<i64>,
+}
+
+#[derive(Serialize, Clone, Copy)]
+pub struct PlanDefinition {
+    pub key: &'static str,
+    pub name: &'static str,
+    pub price: &'static str,
+    pub min_term_months: i64,
+    pub whitelabel: bool,
+    pub limits: PlanLimits,
+    pub payment_url: &'static str,
+    pub payment_qr_url: &'static str,
 }
 
 pub fn email_provider_options() -> Vec<&'static str> {
@@ -123,6 +148,88 @@ pub fn theme_options() -> Vec<ThemeOption> {
     ]
 }
 
+pub fn plan_definitions() -> Vec<PlanDefinition> {
+    vec![
+        PlanDefinition {
+            key: "free",
+            name: "Free",
+            price: "Free",
+            min_term_months: 1,
+            whitelabel: false,
+            limits: PlanLimits {
+                clients: Some(5),
+                contacts_per_client: Some(2),
+                appointments_per_client: Some(20),
+                deployments_per_client: Some(1),
+                crews: Some(2),
+                members_per_crew: Some(5),
+                users: Some(11),
+            },
+            payment_url: "https://wise.com/pay/kinetic/free",
+            payment_qr_url: "/static/qr/wise-free.png",
+        },
+        PlanDefinition {
+            key: "pro",
+            name: "Professional",
+            price: "$19.99 / month",
+            min_term_months: 6,
+            whitelabel: true,
+            limits: PlanLimits {
+                clients: Some(20),
+                contacts_per_client: Some(5),
+                appointments_per_client: Some(40),
+                deployments_per_client: Some(5),
+                crews: Some(5),
+                members_per_crew: Some(10),
+                users: Some(51),
+            },
+            payment_url: "https://wise.com/pay/kinetic/pro",
+            payment_qr_url: "/static/qr/wise-pro.png",
+        },
+        PlanDefinition {
+            key: "enterprise",
+            name: "Enterprise",
+            price: "$49.99 / month",
+            min_term_months: 12,
+            whitelabel: true,
+            limits: PlanLimits {
+                clients: None,
+                contacts_per_client: None,
+                appointments_per_client: None,
+                deployments_per_client: None,
+                crews: None,
+                members_per_crew: None,
+                users: None,
+            },
+            payment_url: "https://wise.com/pay/kinetic/enterprise",
+            payment_qr_url: "/static/qr/wise-enterprise.png",
+        },
+    ]
+}
+
+pub fn find_plan(key: &str) -> Option<PlanDefinition> {
+    plan_definitions()
+        .into_iter()
+        .find(|plan| plan.key.eq_ignore_ascii_case(key))
+}
+
+pub fn is_whitelabel_enabled(plan_key: &str) -> bool {
+    find_plan(plan_key).map(|plan| plan.whitelabel).unwrap_or(false)
+}
+
+pub fn is_plan_expired(plan_key: &str, plan_started_at: &str) -> bool {
+    if !plan_key.eq_ignore_ascii_case("free") {
+        return false;
+    }
+    let parsed = NaiveDateTime::parse_from_str(plan_started_at, "%Y-%m-%d %H:%M:%S");
+    let started_at = match parsed {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    let expires_at = started_at + Duration::days(30);
+    Utc::now().naive_utc() > expires_at
+}
+
 pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
     tenant_repo::list_workspaces(db).await
 }
@@ -150,13 +257,14 @@ pub async fn create_workspace(
     db: &Db,
     slug_input: String,
     name_input: String,
+    plan_key: String,
 ) -> Result<(), WorkspaceError> {
     let slug = match normalize_slug(&slug_input) {
         Some(slug) => slug,
         None => {
             return Err(WorkspaceError {
                 message: "Slug must be lowercase letters, numbers, or dashes.".to_string(),
-                form: WorkspaceFormView::new(slug_input, name_input),
+                form: WorkspaceFormView::new(slug_input, name_input, plan_key),
             })
         }
     };
@@ -164,14 +272,21 @@ pub async fn create_workspace(
     if name_input.trim().is_empty() {
         return Err(WorkspaceError {
             message: "Workspace name is required.".to_string(),
-            form: WorkspaceFormView::new(slug, name_input),
+            form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
         });
     }
 
-    if let Err(err) = tenant_repo::create_tenant(db, &slug, name_input.trim()).await {
+    if find_plan(&plan_key).is_none() {
+        return Err(WorkspaceError {
+            message: "Plan selection is invalid.".to_string(),
+            form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
+        });
+    }
+
+    if let Err(err) = tenant_repo::create_tenant(db, &slug, name_input.trim(), &plan_key).await {
         return Err(WorkspaceError {
             message: format!("Unable to create workspace: {err}"),
-            form: WorkspaceFormView::new(slug, name_input),
+            form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
         });
     }
 
@@ -183,13 +298,14 @@ pub async fn update_workspace(
     id: i64,
     slug_input: String,
     name_input: String,
+    plan_key: String,
 ) -> Result<(), WorkspaceError> {
     let slug = match normalize_slug(&slug_input) {
         Some(slug) => slug,
         None => {
             return Err(WorkspaceError {
                 message: "Slug must be lowercase letters, numbers, or dashes.".to_string(),
-                form: WorkspaceFormView::new(slug_input, name_input),
+                form: WorkspaceFormView::new(slug_input, name_input, plan_key),
             })
         }
     };
@@ -197,14 +313,23 @@ pub async fn update_workspace(
     if name_input.trim().is_empty() {
         return Err(WorkspaceError {
             message: "Workspace name is required.".to_string(),
-            form: WorkspaceFormView::new(slug, name_input),
+            form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
         });
     }
 
-    if let Err(err) = tenant_repo::update_workspace(db, id, &slug, name_input.trim()).await {
+    if find_plan(&plan_key).is_none() {
+        return Err(WorkspaceError {
+            message: "Plan selection is invalid.".to_string(),
+            form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
+        });
+    }
+
+    if let Err(err) =
+        tenant_repo::update_workspace(db, id, &slug, name_input.trim(), &plan_key).await
+    {
         return Err(WorkspaceError {
             message: format!("Unable to update workspace: {err}"),
-            form: WorkspaceFormView::new(slug, name_input),
+            form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
         });
     }
 
@@ -731,3 +856,4 @@ pub async fn seed_demo_data(db: &Db, tenant_id: i64) -> Result<(), String> {
 
     Ok(())
 }
+
