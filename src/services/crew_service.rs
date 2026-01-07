@@ -10,6 +10,7 @@ use crate::models::{
     CrewStats,
 };
 use crate::repositories::{crew_member_repo, crew_repo, user_repo};
+use crate::services::workspace_service;
 use crate::Db;
 
 pub struct CrewError {
@@ -124,6 +125,19 @@ pub async fn create_crew(
     tenant_id: i64,
     form: CrewForm,
 ) -> Result<(), CrewError> {
+    if workspace_service::is_free_plan(db, tenant_id).await {
+        let limits = workspace_service::free_plan_limits(db).await;
+        let limit = limits.crews.unwrap_or(2);
+        let existing = crew_repo::count_crews(db, tenant_id).await.unwrap_or(0);
+        if existing >= limit {
+            return Err(CrewError {
+                message: format!(
+                    "Free plan workspaces can have up to {limit} crews. Upgrade to add more."
+                ),
+                form: CrewFormView::new(form.name, form.status),
+            });
+        }
+    }
     let name = form.name.trim().to_string();
     let status = normalize_status(form.status);
 
@@ -183,6 +197,21 @@ pub async fn create_member(
     crew_id: i64,
     form: CrewMemberForm,
 ) -> Result<(), CrewMemberError> {
+    if workspace_service::is_free_plan(db, tenant_id).await {
+        let limits = workspace_service::free_plan_limits(db).await;
+        let limit = limits.members_per_crew.unwrap_or(5);
+        let existing = crew_member_repo::count_members(db, tenant_id, crew_id)
+            .await
+            .unwrap_or(0);
+        if existing >= limit {
+            return Err(CrewMemberError {
+                message: format!(
+                    "Free plan workspaces can have up to {limit} members per crew. Upgrade to add more."
+                ),
+                form: CrewMemberFormView::new(form.user_id, form.name, form.phone, form.position),
+            });
+        }
+    }
     let name = form.name.trim().to_string();
     if name.is_empty() {
         return Err(CrewMemberError {

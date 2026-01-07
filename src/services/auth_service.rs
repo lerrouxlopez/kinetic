@@ -46,6 +46,7 @@ pub async fn get_user_by_ids(
     Ok(Some(User {
         tenant_id: workspace.id,
         tenant_slug: workspace.slug,
+        plan_key: workspace.plan_key,
         ..user
     }))
 }
@@ -54,11 +55,12 @@ pub async fn register(
     db: &Db,
     form: RegisterForm,
 ) -> Result<(User, i64), RegisterError> {
+    let plan_key = "free".to_string();
     let tenant_name = form.tenant_name.trim().to_string();
     if tenant_name.is_empty() {
         return Err(RegisterError {
             message: "Company name is required.".to_string(),
-            form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+            form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
         });
     }
 
@@ -67,7 +69,7 @@ pub async fn register(
         None => {
             return Err(RegisterError {
                 message: "Company name must be letters, numbers, or dashes.".to_string(),
-                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+                form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
             })
         }
     };
@@ -75,25 +77,25 @@ pub async fn register(
     if form.password.trim().len() < 8 {
         return Err(RegisterError {
             message: "Password must be at least 8 characters.".to_string(),
-            form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+            form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
         });
     }
 
     let tenant_id: i64 = match tenant_repo::find_tenant_id_by_slug(db, &slug).await {
         Ok(Some(id)) => id,
-        Ok(None) => match tenant_repo::create_tenant(db, &slug, &tenant_name, &form.plan_key).await {
+        Ok(None) => match tenant_repo::create_tenant(db, &slug, &tenant_name, &plan_key).await {
             Ok(id) => id,
             Err(err) => {
                 return Err(RegisterError {
                     message: format!("Unable to create workspace: {err}"),
-                    form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+                    form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
                 })
             }
         },
         Err(_) => {
             return Err(RegisterError {
                 message: "Unable to check workspace.".to_string(),
-                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+                form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
             })
         }
     };
@@ -103,7 +105,7 @@ pub async fn register(
         Err(message) => {
             return Err(RegisterError {
                 message,
-                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+                form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
             })
         }
     };
@@ -119,7 +121,7 @@ pub async fn register(
     {
         return Err(RegisterError {
             message: format!("Unable to create user: {err}"),
-            form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+            form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
         });
     }
 
@@ -134,7 +136,7 @@ pub async fn register(
         _ => {
             return Err(RegisterError {
                 message: "User created, but could not load profile.".to_string(),
-                form: RegisterView::new(tenant_name, form.email, form.plan_key.clone()),
+                form: RegisterView::new(tenant_name, form.email, plan_key.clone()),
             })
         }
     };

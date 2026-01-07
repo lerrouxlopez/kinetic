@@ -48,6 +48,10 @@ fn to_datetime_local(value: &str) -> String {
     trimmed.replace(' ', "T")
 }
 
+fn is_theme_locked(plan_key: &str) -> bool {
+    plan_key.eq_ignore_ascii_case("free")
+}
+
 async fn current_user_from_cookies(
     cookies: &CookieJar<'_>,
     db: &Db,
@@ -129,7 +133,6 @@ pub async fn register_form(cookies: &CookieJar<'_>, db: &Db) -> Template {
             current_user: current_user,
             error: Option::<String>::None,
             form: RegisterView::new("", "", "free"),
-            plan_options: workspace_service::plan_definitions(),
         },
     )
 }
@@ -162,7 +165,6 @@ pub async fn register_submit(
                 current_user: Option::<CurrentUserView>::None,
                 error: err.message,
                 form: err.form,
-                plan_options: workspace_service::plan_definitions(),
             },
         )),
     }
@@ -631,6 +633,37 @@ pub async fn dashboard(
     ))
 }
 
+#[get("/<slug>/plans")]
+pub async fn plans(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+) -> Result<Template, Redirect> {
+    let user = workspace_user(cookies, db, slug).await?;
+    let workspace = workspace_service::find_workspace_by_id(db, user.tenant_id)
+        .await
+        .ok()
+        .flatten();
+    let current_plan_key = workspace
+        .as_ref()
+        .map(|workspace| workspace.plan_key.clone())
+        .unwrap_or_else(|| user.plan_key.clone());
+    let current_plan = workspace_service::find_plan(&current_plan_key);
+    let upgrade_options = workspace_service::upgrade_options(&current_plan_key);
+
+    Ok(Template::render(
+        "workspace/plans",
+        context! {
+            title: "Upgrade plan",
+            current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            current_plan_key: current_plan_key,
+            current_plan: current_plan,
+            upgrade_options: upgrade_options,
+        },
+    ))
+}
+
 #[get("/<slug>/tracking?<deployment_id>")]
 pub async fn tracking(
     cookies: &CookieJar<'_>,
@@ -887,6 +920,7 @@ pub async fn settings(
     let theme_options = workspace_service::theme_options();
     let workspace_brand = workspace_brand(db, user.tenant_id).await;
     let is_owner = access_service::is_owner(&user.role);
+    let theme_locked = is_theme_locked(&user.plan_key);
     let requested_tab = tab.unwrap_or_else(|| "email".to_string());
     let active_tab = if !is_owner && (requested_tab == "users" || requested_tab == "theme") {
         "email".to_string()
@@ -948,6 +982,7 @@ pub async fn settings(
             theme_options: theme_options,
             active_tab: active_tab,
             is_owner: is_owner,
+            is_theme_locked: theme_locked,
             users: users_context,
             role_options: access_service::role_options(),
         },
@@ -987,6 +1022,7 @@ pub async fn settings_email_update(
                 theme_options: workspace_service::theme_options(),
                 active_tab: "email",
                 is_owner: access_service::is_owner(&user.role),
+                is_theme_locked: is_theme_locked(&user.plan_key),
                 users: Vec::<serde_json::Value>::new(),
                 role_options: access_service::role_options(),
             },
@@ -1019,6 +1055,27 @@ pub async fn settings_theme_update(
         .as_ref()
         .map(workspace_service::workspace_theme_view)
         .unwrap_or_else(workspace_service::default_theme_view);
+    let theme_locked = is_theme_locked(&user.plan_key);
+    if theme_locked {
+        return Err(Template::render(
+            "placeholders/settings",
+            context! {
+                title: "Settings",
+                current_user: Some(CurrentUserView::from(&user)),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                error: "Theme settings are available on Professional and Enterprise plans.".to_string(),
+                email_form: workspace_service::default_email_settings_view(),
+                email_provider_options: workspace_service::email_provider_options(),
+                theme_form: existing_theme_form,
+                theme_options: workspace_service::theme_options(),
+                active_tab: "theme",
+                is_owner: true,
+                is_theme_locked: theme_locked,
+                users: Vec::<serde_json::Value>::new(),
+                role_options: access_service::role_options(),
+            },
+        ));
+    }
 
     let mut form = form.into_inner();
     let mut logo_path = None;
@@ -1052,6 +1109,7 @@ pub async fn settings_theme_update(
                             theme_options: workspace_service::theme_options(),
                             active_tab: "theme",
                             is_owner: true,
+                            is_theme_locked: theme_locked,
                             users: Vec::<serde_json::Value>::new(),
                             role_options: access_service::role_options(),
                         },
@@ -1074,6 +1132,7 @@ pub async fn settings_theme_update(
                         theme_options: workspace_service::theme_options(),
                         active_tab: "theme",
                         is_owner: true,
+                        is_theme_locked: theme_locked,
                         users: Vec::<serde_json::Value>::new(),
                         role_options: access_service::role_options(),
                     },
@@ -1101,6 +1160,7 @@ pub async fn settings_theme_update(
                         theme_options: workspace_service::theme_options(),
                         active_tab: "theme",
                         is_owner: true,
+                        is_theme_locked: theme_locked,
                         users: Vec::<serde_json::Value>::new(),
                         role_options: access_service::role_options(),
                     },
@@ -1129,6 +1189,7 @@ pub async fn settings_theme_update(
                 theme_options: workspace_service::theme_options(),
                 active_tab: "theme",
                 is_owner: true,
+                is_theme_locked: theme_locked,
                 users: Vec::<serde_json::Value>::new(),
                 role_options: access_service::role_options(),
             },
@@ -1181,6 +1242,7 @@ pub async fn settings_seed_demo(
                     theme_options: workspace_service::theme_options(),
                     active_tab: "email",
                     is_owner: access_service::is_owner(&user.role),
+                    is_theme_locked: is_theme_locked(&user.plan_key),
                     users: Vec::<serde_json::Value>::new(),
                     role_options: access_service::role_options(),
                 },
@@ -1228,6 +1290,7 @@ pub async fn settings_users_update(
                 theme_options: workspace_service::theme_options(),
                 active_tab: "users",
                 is_owner: true,
+                is_theme_locked: is_theme_locked(&user.plan_key),
                 users: Vec::<serde_json::Value>::new(),
                 role_options: access_service::role_options(),
             },
@@ -1264,6 +1327,7 @@ pub async fn settings_users_update(
                 theme_options: workspace_service::theme_options(),
                 active_tab: "users",
                 is_owner: true,
+                is_theme_locked: is_theme_locked(&user.plan_key),
                 users: Vec::<serde_json::Value>::new(),
                 role_options: access_service::role_options(),
             },
@@ -1291,6 +1355,7 @@ pub async fn settings_users_update(
                 theme_options: workspace_service::theme_options(),
                 active_tab: "users",
                 is_owner: true,
+                is_theme_locked: is_theme_locked(&user.plan_key),
                 users: Vec::<serde_json::Value>::new(),
                 role_options: access_service::role_options(),
             },

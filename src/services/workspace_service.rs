@@ -158,7 +158,7 @@ pub fn plan_definitions() -> Vec<PlanDefinition> {
             whitelabel: false,
             limits: PlanLimits {
                 clients: Some(5),
-                contacts_per_client: Some(2),
+                contacts_per_client: Some(5),
                 appointments_per_client: Some(20),
                 deployments_per_client: Some(1),
                 crews: Some(2),
@@ -213,6 +213,138 @@ pub fn find_plan(key: &str) -> Option<PlanDefinition> {
         .find(|plan| plan.key.eq_ignore_ascii_case(key))
 }
 
+fn default_plan_limits(plan_key: &str) -> PlanLimits {
+    find_plan(plan_key)
+        .map(|plan| plan.limits)
+        .unwrap_or(PlanLimits {
+            clients: None,
+            contacts_per_client: None,
+            appointments_per_client: None,
+            deployments_per_client: None,
+            crews: None,
+            members_per_crew: None,
+            users: None,
+        })
+}
+
+pub async fn plan_limits_for(db: &Db, plan_key: &str) -> PlanLimits {
+    let row = sqlx::query(
+        r#"
+        SELECT clients,
+               contacts_per_client,
+               appointments_per_client,
+               deployments_per_client,
+               crews,
+               members_per_crew,
+               users
+        FROM plan_limits
+        WHERE plan_key = ?
+        "#,
+    )
+    .bind(plan_key)
+    .fetch_optional(&db.0)
+    .await;
+
+    match row {
+        Ok(Some(row)) => PlanLimits {
+            clients: Some(row.get("clients")),
+            contacts_per_client: Some(row.get("contacts_per_client")),
+            appointments_per_client: Some(row.get("appointments_per_client")),
+            deployments_per_client: Some(row.get("deployments_per_client")),
+            crews: Some(row.get("crews")),
+            members_per_crew: Some(row.get("members_per_crew")),
+            users: Some(row.get("users")),
+        },
+        _ => default_plan_limits(plan_key),
+    }
+}
+
+pub async fn free_plan_limits(db: &Db) -> PlanLimits {
+    plan_limits_for(db, "free").await
+}
+
+pub async fn update_free_plan_limits(
+    db: &Db,
+    limits: &crate::models::PlanLimitsForm,
+) -> Result<(), String> {
+    if limits.clients <= 0
+        || limits.contacts_per_client <= 0
+        || limits.appointments_per_client <= 0
+        || limits.deployments_per_client <= 0
+        || limits.crews <= 0
+        || limits.members_per_crew <= 0
+        || limits.users <= 0
+    {
+        return Err("All limit values must be greater than 0.".to_string());
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO plan_limits (
+            plan_key,
+            clients,
+            contacts_per_client,
+            appointments_per_client,
+            deployments_per_client,
+            crews,
+            members_per_crew,
+            users
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(plan_key) DO UPDATE SET
+            clients = excluded.clients,
+            contacts_per_client = excluded.contacts_per_client,
+            appointments_per_client = excluded.appointments_per_client,
+            deployments_per_client = excluded.deployments_per_client,
+            crews = excluded.crews,
+            members_per_crew = excluded.members_per_crew,
+            users = excluded.users
+        "#,
+    )
+    .bind("free")
+    .bind(limits.clients)
+    .bind(limits.contacts_per_client)
+    .bind(limits.appointments_per_client)
+    .bind(limits.deployments_per_client)
+    .bind(limits.crews)
+    .bind(limits.members_per_crew)
+    .bind(limits.users)
+    .execute(&db.0)
+    .await
+    .map_err(|err| format!("Unable to update free plan limits: {err}"))?;
+
+    Ok(())
+}
+
+pub async fn is_free_plan(db: &Db, tenant_id: i64) -> bool {
+    find_workspace_by_id(db, tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace.plan_key.eq_ignore_ascii_case("free"))
+        .unwrap_or(false)
+}
+
+pub fn upgrade_options(current_plan: &str) -> Vec<PlanDefinition> {
+    let order = ["free", "pro", "enterprise"];
+    let current_index = order
+        .iter()
+        .position(|key| key.eq_ignore_ascii_case(current_plan));
+    let plans = plan_definitions();
+    match current_index {
+        Some(index) => plans
+            .into_iter()
+            .filter(|plan| {
+                order
+                    .iter()
+                    .position(|key| key.eq_ignore_ascii_case(&plan.key))
+                    .map(|plan_index| plan_index > index)
+                    .unwrap_or(false)
+            })
+            .collect(),
+        None => plans,
+    }
+}
+
 pub fn is_whitelabel_enabled(plan_key: &str) -> bool {
     find_plan(plan_key).map(|plan| plan.whitelabel).unwrap_or(false)
 }
@@ -257,8 +389,9 @@ pub async fn create_workspace(
     db: &Db,
     slug_input: String,
     name_input: String,
-    plan_key: String,
+    _plan_key: String,
 ) -> Result<(), WorkspaceError> {
+    let plan_key = "free".to_string();
     let slug = match normalize_slug(&slug_input) {
         Some(slug) => slug,
         None => {
@@ -716,13 +849,93 @@ fn logo_url_from_path(path: &str) -> String {
 }
 
 pub async fn delete_workspace(db: &Db, id: i64) -> Result<(), String> {
-    tenant_repo::delete_users_by_tenant(db, id)
+    let mut tx = db
+        .0
+        .begin()
+        .await
+        .map_err(|err| format!("Unable to start workspace delete: {err}"))?;
+
+    sqlx::query("DELETE FROM outbound_emails WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace emails: {err}"))?;
+    sqlx::query("DELETE FROM appointments WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace appointments: {err}"))?;
+    sqlx::query("DELETE FROM deployment_updates WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace tracking updates: {err}"))?;
+    sqlx::query("DELETE FROM invoices WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace invoices: {err}"))?;
+    sqlx::query("DELETE FROM deployments WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace deployments: {err}"))?;
+    sqlx::query("DELETE FROM client_contacts WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace contacts: {err}"))?;
+    sqlx::query("DELETE FROM clients WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace clients: {err}"))?;
+    sqlx::query("DELETE FROM crew_members WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace crew members: {err}"))?;
+    sqlx::query("DELETE FROM crews WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace crews: {err}"))?;
+    sqlx::query("DELETE FROM user_permissions WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|err| format!("Unable to delete workspace permissions: {err}"))?;
+    sqlx::query("DELETE FROM users WHERE tenant_id = ?")
+        .bind(id)
+        .execute(&mut *tx)
         .await
         .map_err(|err| format!("Unable to delete workspace users: {err}"))?;
-    tenant_repo::delete_workspace(db, id)
+    sqlx::query("DELETE FROM tenants WHERE id = ?")
+        .bind(id)
+        .execute(&mut *tx)
         .await
-        .map_err(|err| format!("Unable to delete workspace: {err}"))?;
+        .map_err(|err| {
+            if is_foreign_key_violation(&err) {
+                "Unable to delete workspace because it still has related data. Delete the workspace data before removing the workspace.".to_string()
+            } else {
+                format!("Unable to delete workspace: {err}")
+            }
+        })?;
+
+    tx.commit()
+        .await
+        .map_err(|err| format!("Unable to finalize workspace delete: {err}"))?;
     Ok(())
+}
+
+fn is_foreign_key_violation(err: &sqlx::Error) -> bool {
+    match err {
+        sqlx::Error::Database(db_err) => {
+            db_err.code().map(|code| code == "787").unwrap_or(false)
+                || db_err.message().contains("FOREIGN KEY constraint failed")
+        }
+        _ => false,
+    }
 }
 
 pub async fn seed_demo_data(db: &Db, tenant_id: i64) -> Result<(), String> {

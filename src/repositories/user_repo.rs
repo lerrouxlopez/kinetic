@@ -11,7 +11,7 @@ pub async fn find_user_by_ids(
 ) -> Result<Option<User>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug
+        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug, tenants.plan_key
         FROM users
         JOIN tenants ON tenants.id = users.tenant_id
         WHERE users.id = ? AND tenants.id = ?
@@ -26,6 +26,7 @@ pub async fn find_user_by_ids(
         id: row.get("id"),
         tenant_id: row.get("tenant_id"),
         tenant_slug: row.get("slug"),
+        plan_key: row.get("plan_key"),
         email: row.get("email"),
         role: row.get("role"),
         is_super_admin: row.get::<i64, _>("is_super_admin") == 1,
@@ -39,7 +40,7 @@ pub async fn find_user_by_email_and_tenant(
 ) -> Result<Option<User>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug
+        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug, tenants.plan_key
         FROM users
         JOIN tenants ON tenants.id = users.tenant_id
         WHERE users.email = ? AND tenants.id = ?
@@ -54,6 +55,7 @@ pub async fn find_user_by_email_and_tenant(
         id: row.get("id"),
         tenant_id: row.get("tenant_id"),
         tenant_slug: row.get("slug"),
+        plan_key: row.get("plan_key"),
         email: row.get("email"),
         role: row.get("role"),
         is_super_admin: row.get::<i64, _>("is_super_admin") == 1,
@@ -67,7 +69,7 @@ pub async fn find_user_by_id(
 ) -> Result<Option<User>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug
+        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug, tenants.plan_key
         FROM users
         JOIN tenants ON tenants.id = users.tenant_id
         WHERE users.id = ? AND tenants.id = ?
@@ -82,6 +84,7 @@ pub async fn find_user_by_id(
         id: row.get("id"),
         tenant_id: row.get("tenant_id"),
         tenant_slug: row.get("slug"),
+        plan_key: row.get("plan_key"),
         email: row.get("email"),
         role: row.get("role"),
         is_super_admin: row.get::<i64, _>("is_super_admin") == 1,
@@ -94,7 +97,7 @@ pub async fn find_user_by_id_any(
 ) -> Result<Option<User>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug
+        SELECT users.id, users.email, users.role, users.is_super_admin, tenants.id as tenant_id, tenants.slug, tenants.plan_key
         FROM users
         JOIN tenants ON tenants.id = users.tenant_id
         WHERE users.id = ?
@@ -108,6 +111,7 @@ pub async fn find_user_by_id_any(
         id: row.get("id"),
         tenant_id: row.get("tenant_id"),
         tenant_slug: row.get("slug"),
+        plan_key: row.get("plan_key"),
         email: row.get("email"),
         role: row.get("role"),
         is_super_admin: row.get::<i64, _>("is_super_admin") == 1,
@@ -121,7 +125,7 @@ pub async fn find_user_auth_by_email_and_tenant_slug(
 ) -> Result<Option<UserAuth>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT users.id, users.email, users.role, users.is_super_admin, users.password_hash, tenants.id as tenant_id, tenants.slug
+        SELECT users.id, users.email, users.role, users.is_super_admin, users.password_hash, tenants.id as tenant_id, tenants.slug, tenants.plan_key
         FROM users
         JOIN tenants ON tenants.id = users.tenant_id
         WHERE users.email = ? AND tenants.slug = ?
@@ -137,6 +141,7 @@ pub async fn find_user_auth_by_email_and_tenant_slug(
             id: row.get("id"),
             tenant_id: row.get("tenant_id"),
             tenant_slug: row.get("slug"),
+            plan_key: row.get("plan_key"),
             email: row.get("email"),
             role: row.get("role"),
             is_super_admin: row.get::<i64, _>("is_super_admin") == 1,
@@ -257,7 +262,7 @@ pub async fn find_super_admin_auth_by_email(
 ) -> Result<Option<UserAuth>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT users.id, users.email, users.role, users.is_super_admin, users.password_hash, tenants.id as tenant_id, tenants.slug
+        SELECT users.id, users.email, users.role, users.is_super_admin, users.password_hash, tenants.id as tenant_id, tenants.slug, tenants.plan_key
         FROM users
         JOIN tenants ON tenants.id = users.tenant_id
         WHERE users.email = ? AND users.is_super_admin = 1
@@ -272,6 +277,7 @@ pub async fn find_super_admin_auth_by_email(
             id: row.get("id"),
             tenant_id: row.get("tenant_id"),
             tenant_slug: row.get("slug"),
+            plan_key: row.get("plan_key"),
             email: row.get("email"),
             role: row.get("role"),
             is_super_admin: row.get::<i64, _>("is_super_admin") == 1,

@@ -443,6 +443,34 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     .execute(&db.0)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS plan_limits (
+            plan_key TEXT PRIMARY KEY,
+            clients INTEGER NOT NULL,
+            contacts_per_client INTEGER NOT NULL,
+            appointments_per_client INTEGER NOT NULL,
+            deployments_per_client INTEGER NOT NULL,
+            crews INTEGER NOT NULL,
+            members_per_crew INTEGER NOT NULL,
+            users INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
+    sqlx::query(
+        r#"
+        INSERT OR IGNORE INTO plan_limits
+            (plan_key, clients, contacts_per_client, appointments_per_client, deployments_per_client, crews, members_per_crew, users)
+        VALUES
+            ('free', 5, 5, 20, 1, 2, 5, 11)
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
     seed_admin(db).await?;
     seed_client_data(db).await?;
 

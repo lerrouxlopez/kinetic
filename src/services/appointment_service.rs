@@ -2,6 +2,7 @@ use rocket_db_pools::sqlx;
 
 use crate::models::{Appointment, AppointmentForm, AppointmentFormView};
 use crate::repositories::appointment_repo;
+use crate::services::workspace_service;
 use crate::Db;
 
 pub struct AppointmentError {
@@ -83,6 +84,26 @@ pub async fn create_appointment(
     contact_id: i64,
     form: AppointmentForm,
 ) -> Result<(), AppointmentError> {
+    if workspace_service::is_free_plan(db, tenant_id).await {
+        let limits = workspace_service::free_plan_limits(db).await;
+        let limit = limits.appointments_per_client.unwrap_or(20);
+        let existing = appointment_repo::count_appointments_by_client(db, tenant_id, client_id)
+            .await
+            .unwrap_or(0);
+        if existing >= limit {
+            return Err(AppointmentError {
+                message: format!(
+                    "Free plan workspaces can have up to {limit} appointments per client. Upgrade to add more."
+                ),
+                form: AppointmentFormView::new(
+                    form.title,
+                    form.scheduled_for,
+                    form.status,
+                    form.notes,
+                ),
+            });
+        }
+    }
     let title = form.title.trim().to_string();
     let scheduled_for = form.scheduled_for.trim().to_string();
     let status = normalize_status(form.status);

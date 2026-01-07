@@ -9,7 +9,11 @@
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/crew">Back to roster</a>
-        <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/new">Add member</a>
+        {% if member_limit_reached %}
+          <button class="btn btn-primary" type="button" disabled title="Free plan limit reached ({{ member_limit }} members per crew). Upgrade to add more.">Add member</button>
+        {% else %}
+          <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/new">Add member</a>
+        {% endif %}
       </div>
     </div>
 
@@ -37,7 +41,11 @@
     <div class="card glass-card p-3">
       <div class="d-flex align-items-center justify-content-between mb-3 px-2">
         <h3 class="h6 fw-semibold mb-0">Members</h3>
-        <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/new">Add member</a>
+        {% if member_limit_reached %}
+          <button class="btn btn-sm btn-outline-primary" type="button" disabled title="Free plan limit reached ({{ member_limit }} members per crew). Upgrade to add more.">Add member</button>
+        {% else %}
+          <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/new">Add member</a>
+        {% endif %}
       </div>
       <div class="table-responsive">
         <table class="table align-middle mb-0">

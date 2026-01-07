@@ -1,0 +1,55 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start gap-3 mb-4">
+    <div>
+      <h2 class="h4 fw-bold mb-1">Plans</h2>
+      <p class="text-muted">Signed in as {{ admin_email }}.</p>
+      {% if error %}
+        <div class="alert alert-danger mt-3">{{ error }}</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card glass-card p-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h3 class="h5 fw-semibold mb-1">Free plan limits</h3>
+        <p class="text-muted mb-0">Editable limits applied to Free plan workspaces.</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/plans/free">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Clients</label>
+          <input class="form-control" type="number" min="1" name="clients" value="{{ free_limits.clients }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Contacts per client</label>
+          <input class="form-control" type="number" min="1" name="contacts_per_client" value="{{ free_limits.contacts_per_client }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Appointments per client</label>
+          <input class="form-control" type="number" min="1" name="appointments_per_client" value="{{ free_limits.appointments_per_client }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Deployments per client</label>
+          <input class="form-control" type="number" min="1" name="deployments_per_client" value="{{ free_limits.deployments_per_client }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Crews</label>
+          <input class="form-control" type="number" min="1" name="crews" value="{{ free_limits.crews }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Members per crew</label>
+          <input class="form-control" type="number" min="1" name="members_per_crew" value="{{ free_limits.members_per_crew }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Total workspace users</label>
+          <input class="form-control" type="number" min="1" name="users" value="{{ free_limits.users }}" required>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-4" type="submit">Save free plan limits</button>
+    </form>
+  </div>
+{% endblock content %}

@@ -1,0 +1,73 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="d-flex flex-column flex-lg-row align-items-start justify-content-between gap-3 mb-4">
+    <div>
+      <h2 class="h4 fw-bold mb-1">Upgrade your plan</h2>
+      {% if current_plan %}
+        <p class="text-muted">Current plan: {{ current_plan.name }} ({{ current_plan.price }}).</p>
+      {% else %}
+        <p class="text-muted">Review available plans for your workspace.</p>
+      {% endif %}
+    </div>
+    <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/dashboard">Back to dashboard</a>
+  </div>
+
+  {% if upgrade_options | length == 0 %}
+    <div class="alert alert-success">You are already on the Enterprise plan.</div>
+  {% else %}
+    <div class="row g-4">
+      {% for plan in upgrade_options %}
+        <div class="col-lg-4">
+          <div class="card glass-card p-4 h-100">
+            <div class="d-flex align-items-center justify-content-between">
+              <h3 class="h5 fw-semibold mb-0">{{ plan.name }}</h3>
+              <span class="text-muted small">{{ plan.key | upper }}</span>
+            </div>
+            <div class="text-muted mt-2">
+              {% if plan.key == "free" %}
+                Free
+              {% else %}
+                {{ plan.price }}
+              {% endif %}
+            </div>
+            {% if plan.key == "free" %}
+              <ul class="text-muted small mt-3 mb-0">
+                <li>No whitelabelling.</li>
+                <li>Limits: 5 clients.</li>
+                <li>5 contacts per client.</li>
+                <li>20 appointments per client.</li>
+                <li>1 deployment per client.</li>
+                <li>2 crews.</li>
+                <li>5 members per crew.</li>
+                <li>11 total workspace users.</li>
+                <li>Workspace limited to 1 month; owner must upgrade after 1 month.</li>
+              </ul>
+            {% elif plan.key == "pro" %}
+              <ul class="text-muted small mt-3 mb-0">
+                <li>Whitelabelled.</li>
+                <li>Limits: 20 clients.</li>
+                <li>5 contacts per client.</li>
+                <li>40 appointments per client.</li>
+                <li>5 deployment per client.</li>
+                <li>5 crews.</li>
+                <li>10 members per crew.</li>
+                <li>51 total workspace users.</li>
+                <li>Minimum 6 month subscription.</li>
+              </ul>
+            {% else %}
+              <ul class="text-muted small mt-3 mb-0">
+                <li>No limits.</li>
+                <li>Minimum 1 year subscription.</li>
+              </ul>
+            {% endif %}
+            <div class="d-grid gap-2 mt-4">
+              <a class="btn btn-primary" href="{{ plan.payment_url }}" target="_blank" rel="noopener">Upgrade via payment link</a>
+              <a class="btn btn-outline-light" href="{{ plan.payment_qr_url }}" target="_blank" rel="noopener">View QR code</a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endblock content %}

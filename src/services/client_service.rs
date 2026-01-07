@@ -9,6 +9,7 @@ use crate::models::{
     ClientFormView,
 };
 use crate::repositories::client_repo;
+use crate::services::workspace_service;
 use crate::Db;
 
 pub struct ClientError {
@@ -70,6 +71,28 @@ pub async fn create_client(
     tenant_id: i64,
     form: ClientForm,
 ) -> Result<(), ClientError> {
+    if workspace_service::is_free_plan(db, tenant_id).await {
+        let limits = workspace_service::free_plan_limits(db).await;
+        let limit = limits.clients.unwrap_or(5);
+        let existing = client_repo::count_clients(db, tenant_id).await.unwrap_or(0);
+        if existing >= limit {
+            return Err(ClientError {
+                message: format!(
+                    "Free plan workspaces can have up to {limit} clients. Upgrade to add more."
+                ),
+                form: ClientFormView::new(
+                    form.company_name,
+                    form.address,
+                    form.phone,
+                    form.email,
+                    form.latitude,
+                    form.longitude,
+                    form.stage,
+                    form.currency,
+                ),
+            });
+        }
+    }
     let company_name = form.company_name.trim().to_string();
     if company_name.is_empty() {
         return Err(ClientError {
@@ -294,6 +317,28 @@ pub async fn create_contact(
     client_id: i64,
     form: ClientContactForm,
 ) -> Result<(), ContactError> {
+    if workspace_service::is_free_plan(db, tenant_id).await {
+        let limits = workspace_service::free_plan_limits(db).await;
+        let limit = limits.contacts_per_client.unwrap_or(5);
+        let existing = client_repo::count_contacts(db, tenant_id, client_id)
+            .await
+            .unwrap_or(0);
+        if existing >= limit {
+            return Err(ContactError {
+                message: format!(
+                    "Free plan workspaces can have up to {limit} contacts per client. Upgrade to add more."
+                ),
+                form: ClientContactFormView::new(
+                    form.name,
+                    form.address,
+                    form.email,
+                    form.phone,
+                    form.department,
+                    form.position,
+                ),
+            });
+        }
+    }
     let name = form.name.trim().to_string();
     if name.is_empty() {
         return Err(ContactError {

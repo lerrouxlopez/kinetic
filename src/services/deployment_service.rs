@@ -9,6 +9,7 @@ use crate::models::{
     DeploymentSummary,
 };
 use crate::repositories::deployment_repo;
+use crate::services::workspace_service;
 use crate::Db;
 
 pub struct DeploymentError {
@@ -91,6 +92,29 @@ pub async fn create_deployment(
                 form.status,
             ),
         });
+    }
+    if workspace_service::is_free_plan(db, tenant_id).await {
+        let limits = workspace_service::free_plan_limits(db).await;
+        let limit = limits.deployments_per_client.unwrap_or(1);
+        let existing = deployment_repo::count_deployments_by_client(db, tenant_id, form.client_id)
+            .await
+            .unwrap_or(0);
+        if existing >= limit {
+            return Err(DeploymentError {
+                message: format!(
+                    "Free plan workspaces can have {limit} deployments per client. Upgrade to add more."
+                ),
+                form: DeploymentFormView::new(
+                    form.client_id,
+                    form.crew_id,
+                    form.start_at,
+                    form.end_at,
+                    form.fee_per_hour,
+                    form.info,
+                    form.status,
+                ),
+            });
+        }
     }
     if form.crew_id <= 0 {
         return Err(DeploymentError {

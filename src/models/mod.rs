@@ -37,6 +37,17 @@ pub struct AdminUserForm {
     pub password: Option<String>,
 }
 
+#[derive(FromForm, Clone)]
+pub struct PlanLimitsForm {
+    pub clients: i64,
+    pub contacts_per_client: i64,
+    pub appointments_per_client: i64,
+    pub deployments_per_client: i64,
+    pub crews: i64,
+    pub members_per_crew: i64,
+    pub users: i64,
+}
+
 #[derive(FromForm)]
 pub struct WorkspaceForm {
     pub slug: String,
@@ -159,6 +170,7 @@ pub struct User {
     pub id: i64,
     pub tenant_id: i64,
     pub tenant_slug: String,
+    pub plan_key: String,
     pub email: String,
     pub role: String,
     pub is_super_admin: bool,
@@ -574,6 +586,7 @@ pub struct PaginationView {
 pub struct CurrentUserView {
     pub tenant_slug: String,
     pub email: String,
+    pub plan_key: String,
 }
 
 impl From<&User> for CurrentUserView {
@@ -581,6 +594,7 @@ impl From<&User> for CurrentUserView {
         CurrentUserView {
             tenant_slug: user.tenant_slug.clone(),
             email: user.email.clone(),
+            plan_key: user.plan_key.clone(),
         }
     }
 }

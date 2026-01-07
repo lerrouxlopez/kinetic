@@ -111,6 +111,10 @@ pub async fn crew_index(
         .await
         .unwrap_or_default();
     let stats = crew_service::stats_from_crews(&all_crews);
+    let is_free_plan = user.plan_key.eq_ignore_ascii_case("free");
+    let free_limits = workspace_service::free_plan_limits(db).await;
+    let crew_limit = free_limits.crews.unwrap_or(2) as usize;
+    let crew_limit_reached = is_free_plan && stats.total_crews >= crew_limit;
     let page = normalize_page(page);
     let offset = ((page - 1) * PER_PAGE) as i64;
     let crews = crew_service::list_crews_paged(db, tenant_id, PER_PAGE as i64, offset)
@@ -129,6 +133,8 @@ pub async fn crew_index(
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             crews: crews,
             stats: stats,
+            crew_limit_reached: crew_limit_reached,
+            crew_limit: crew_limit,
             pagination: pagination,
         },
     ))
@@ -173,6 +179,7 @@ pub async fn crew_show(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -190,6 +197,10 @@ pub async fn crew_show(
             tenant_slug, id, target_page
         )
     });
+    let is_free_plan = user.plan_key.eq_ignore_ascii_case("free");
+    let free_limits = workspace_service::free_plan_limits(db).await;
+    let member_limit = free_limits.members_per_crew.unwrap_or(5);
+    let member_limit_reached = is_free_plan && total_members >= member_limit;
 
     Ok(Template::render(
         "crew/show",
@@ -200,6 +211,8 @@ pub async fn crew_show(
             crew: crew,
             members: members,
             members_count: total_members as usize,
+            member_limit_reached: member_limit_reached,
+            member_limit: member_limit,
             members_pagination: members_pagination,
         },
     ))
@@ -318,6 +331,7 @@ pub async fn crew_edit_form(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -375,6 +389,7 @@ pub async fn crew_member_new_form(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -437,6 +452,7 @@ pub async fn crew_member_create(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -506,6 +522,7 @@ pub async fn crew_member_edit_form(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -521,12 +538,13 @@ pub async fn crew_member_edit_form(
                 context! {
                     title: "Crew details",
                     current_user: Some(current_user),
-            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
                     crew: crew,
                     members: Vec::<crate::models::CrewMember>::new(),
                     members_count: 0,
                     members_pagination: members_pagination,
                     error: "Member not found.".to_string(),
+                    member_limit_reached: false,
                 },
             ))
         }
@@ -606,6 +624,7 @@ pub async fn crew_member_update(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -676,6 +695,7 @@ pub async fn crew_member_delete(
                     crews: Vec::<crate::models::Crew>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
                 },
             ))
         }
@@ -689,12 +709,14 @@ pub async fn crew_member_delete(
             context! {
                 title: "Crew details",
                 current_user: Some(current_user),
-            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
                 crew: crew,
                 members: Vec::<crate::models::CrewMember>::new(),
                 members_count: 0,
                 members_pagination: members_pagination,
                 error: message,
+                member_limit_reached: false,
+                crew_limit_reached: false,
             },
         ));
     }
@@ -787,6 +809,7 @@ pub async fn crew_delete(
                 crews: Vec::<crate::models::Crew>::new(),
                 stats: crew_service::stats_from_crews(&[]),
                 error: message,
+                crew_limit_reached: false,
             },
         ));
     }
@@ -796,5 +819,7 @@ pub async fn crew_delete(
         page = Option::<usize>::None
     ))))
 }
+
+
 
 

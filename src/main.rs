@@ -15,6 +15,8 @@ use controllers::admin_controller::{
     admin_login_form,
     admin_login_submit,
     admin_logout,
+    admin_plans,
+    admin_plans_update,
     admin_user_create,
     admin_user_delete,
     admin_user_edit_form,
@@ -88,6 +90,7 @@ use controllers::public_controller::{
     login_form,
     login_submit,
     logout,
+    plans,
     register_form,
     register_submit,
     settings_users_update,
@@ -131,6 +134,8 @@ fn rocket() -> _ {
                 admin_login_form,
                 admin_login_submit,
                 admin_logout,
+                admin_plans,
+                admin_plans_update,
                 admin_users,
                 admin_user_new_form,
                 admin_user_create,
@@ -200,6 +205,7 @@ fn rocket() -> _ {
                 deployment_update,
                 deployment_delete,
                 deployments,
+                plans,
                 dashboard
             ],
         )

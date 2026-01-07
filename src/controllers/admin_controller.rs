@@ -6,6 +6,7 @@ use rocket_dyn_templates::{context, Template};
 use crate::models::{
     AdminUserForm,
     AdminUserFormView,
+    PlanLimitsForm,
     PaginationView,
     WorkspaceForm,
     WorkspaceFormView,
@@ -121,6 +122,70 @@ pub async fn admin_workspaces(
             pagination: pagination,
         },
     ))
+}
+
+#[get("/admin/plans")]
+pub async fn admin_plans(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+) -> Result<Template, Redirect> {
+    let admin = match admin_from_cookies(cookies, db).await {
+        Some(admin) => admin,
+        None => return Err(Redirect::to(uri!(admin_login_form))),
+    };
+    let limits = workspace_service::free_plan_limits(db).await;
+
+    Ok(Template::render(
+        "admin/plans",
+        context! {
+            title: "Plans",
+            admin_email: admin.email,
+            error: Option::<String>::None,
+            free_limits: context! {
+                clients: limits.clients.unwrap_or(0),
+                contacts_per_client: limits.contacts_per_client.unwrap_or(0),
+                appointments_per_client: limits.appointments_per_client.unwrap_or(0),
+                deployments_per_client: limits.deployments_per_client.unwrap_or(0),
+                crews: limits.crews.unwrap_or(0),
+                members_per_crew: limits.members_per_crew.unwrap_or(0),
+                users: limits.users.unwrap_or(0),
+            },
+        },
+    ))
+}
+
+#[post("/admin/plans/free", data = "<form>")]
+pub async fn admin_plans_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    form: Form<PlanLimitsForm>,
+) -> Result<Redirect, Template> {
+    let admin = match admin_from_cookies(cookies, db).await {
+        Some(admin) => admin,
+        None => return Ok(Redirect::to(uri!(admin_login_form))),
+    };
+    let form = form.into_inner();
+
+    match workspace_service::update_free_plan_limits(db, &form).await {
+        Ok(_) => Ok(Redirect::to(uri!(admin_plans))),
+        Err(message) => Err(Template::render(
+            "admin/plans",
+            context! {
+                title: "Plans",
+                admin_email: admin.email,
+                error: message,
+                free_limits: context! {
+                    clients: form.clients,
+                    contacts_per_client: form.contacts_per_client,
+                    appointments_per_client: form.appointments_per_client,
+                    deployments_per_client: form.deployments_per_client,
+                    crews: form.crews,
+                    members_per_crew: form.members_per_crew,
+                    users: form.users,
+                },
+            },
+        )),
+    }
 }
 
 #[get("/admin/users")]
@@ -577,7 +642,6 @@ pub async fn admin_workspace_new_form(
             admin_email: admin.email,
             error: Option::<String>::None,
             form: WorkspaceFormView::new("", "", "free"),
-            plan_options: workspace_service::plan_definitions(),
         },
     ))
 }
@@ -593,7 +657,7 @@ pub async fn admin_workspace_create(
         None => return Ok(Redirect::to(uri!(admin_login_form))),
     };
     let form = form.into_inner();
-    match workspace_service::create_workspace(db, form.slug, form.name, form.plan_key).await {
+    match workspace_service::create_workspace(db, form.slug, form.name, "free".to_string()).await {
         Ok(_) => Ok(Redirect::to(uri!(admin_workspaces(
             page = Option::<usize>::None
         )))),
@@ -604,7 +668,6 @@ pub async fn admin_workspace_create(
                 admin_email: admin.email,
                 error: err.message,
                 form: err.form,
-                plan_options: workspace_service::plan_definitions(),
             },
         )),
     }

@@ -233,6 +233,21 @@ pub async fn delete_deployment(
     Ok(())
 }
 
+pub async fn count_deployments_by_client(
+    db: &Db,
+    tenant_id: i64,
+    client_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT COUNT(*) as count FROM deployments WHERE tenant_id = ? AND client_id = ?",
+    )
+    .bind(tenant_id)
+    .bind(client_id)
+    .fetch_one(&db.0)
+    .await?;
+    Ok(row.get("count"))
+}
+
 pub async fn list_deployments(
     db: &Db,
     tenant_id: i64,
