@@ -59,7 +59,11 @@
 
     <div class="d-flex align-items-center justify-content-between mb-3">
       <h3 class="h5 fw-semibold mb-0">Contacts</h3>
-      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/new">Add contact</a>
+      {% if contacts_limit_reached | default(value=false) %}
+        <button class="btn btn-outline-light" type="button" disabled title="Plan limit reached ({{ contacts_limit | default(value=0) }} contacts per client). Upgrade to add more.">Add contact</button>
+      {% else %}
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/new">Add contact</a>
+      {% endif %}
     </div>
     <div class="card glass-card p-3">
       <div class="table-responsive">
@@ -85,7 +89,11 @@
                 <td>{{ contact.department }}</td>
                 <td>{{ contact.position }}</td>
                 <td class="text-end">
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/appointments/new">Add appointment</a>
+                  {% if appointments_limit_reached | default(value=false) %}
+                    <button class="btn btn-sm btn-outline-light" type="button" disabled title="Plan limit reached ({{ appointments_limit | default(value=0) }} appointments per client). Upgrade to add more.">Add appointment</button>
+                  {% else %}
+                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/appointments/new">Add appointment</a>
+                  {% endif %}
                   <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/email">Email</a>
                   <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/edit">Edit</a>
                   <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/delete">

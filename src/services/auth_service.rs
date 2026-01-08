@@ -10,6 +10,7 @@ use crate::models::{
 };
 use crate::repositories::{tenant_repo, user_repo};
 use crate::services::utils::{hash_password, normalize_slug, verify_password};
+use crate::services::workspace_service;
 use crate::Db;
 
 pub struct RegisterError {
@@ -27,7 +28,8 @@ pub async fn get_user_by_ids(
     user_id: i64,
     tenant_id: i64,
 ) -> Result<Option<User>, sqlx::Error> {
-    if let Some(user) = user_repo::find_user_by_ids(db, user_id, tenant_id).await? {
+    if let Some(mut user) = user_repo::find_user_by_ids(db, user_id, tenant_id).await? {
+        user.plan_expired = workspace_service::is_workspace_plan_expired(db, user.tenant_id).await;
         return Ok(Some(user));
     }
 
@@ -43,12 +45,14 @@ pub async fn get_user_by_ids(
         None => return Ok(None),
     };
 
-    Ok(Some(User {
+    let mut user = User {
         tenant_id: workspace.id,
         tenant_slug: workspace.slug,
         plan_key: workspace.plan_key,
         ..user
-    }))
+    };
+    user.plan_expired = workspace_service::is_workspace_plan_expired(db, user.tenant_id).await;
+    Ok(Some(user))
 }
 
 pub async fn register(

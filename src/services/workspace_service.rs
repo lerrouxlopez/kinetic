@@ -40,6 +40,7 @@ pub struct PlanLimits {
     pub crews: Option<i64>,
     pub members_per_crew: Option<i64>,
     pub users: Option<i64>,
+    pub expires_after_days: Option<i64>,
 }
 
 #[derive(Serialize, Clone, Copy)]
@@ -164,6 +165,7 @@ pub fn plan_definitions() -> Vec<PlanDefinition> {
                 crews: Some(2),
                 members_per_crew: Some(5),
                 users: Some(11),
+                expires_after_days: Some(30),
             },
             payment_url: "https://wise.com/pay/kinetic/free",
             payment_qr_url: "/static/qr/wise-free.png",
@@ -182,6 +184,7 @@ pub fn plan_definitions() -> Vec<PlanDefinition> {
                 crews: Some(5),
                 members_per_crew: Some(10),
                 users: Some(51),
+                expires_after_days: None,
             },
             payment_url: "https://wise.com/pay/kinetic/pro",
             payment_qr_url: "/static/qr/wise-pro.png",
@@ -200,6 +203,7 @@ pub fn plan_definitions() -> Vec<PlanDefinition> {
                 crews: None,
                 members_per_crew: None,
                 users: None,
+                expires_after_days: None,
             },
             payment_url: "https://wise.com/pay/kinetic/enterprise",
             payment_qr_url: "/static/qr/wise-enterprise.png",
@@ -213,6 +217,12 @@ pub fn find_plan(key: &str) -> Option<PlanDefinition> {
         .find(|plan| plan.key.eq_ignore_ascii_case(key))
 }
 
+pub fn plan_name(plan_key: &str) -> &'static str {
+    find_plan(plan_key)
+        .map(|plan| plan.name)
+        .unwrap_or("Current")
+}
+
 fn default_plan_limits(plan_key: &str) -> PlanLimits {
     find_plan(plan_key)
         .map(|plan| plan.limits)
@@ -224,6 +234,7 @@ fn default_plan_limits(plan_key: &str) -> PlanLimits {
             crews: None,
             members_per_crew: None,
             users: None,
+            expires_after_days: None,
         })
 }
 
@@ -236,7 +247,8 @@ pub async fn plan_limits_for(db: &Db, plan_key: &str) -> PlanLimits {
                deployments_per_client,
                crews,
                members_per_crew,
-               users
+               users,
+               expires_after_days
         FROM plan_limits
         WHERE plan_key = ?
         "#,
@@ -246,6 +258,16 @@ pub async fn plan_limits_for(db: &Db, plan_key: &str) -> PlanLimits {
     .await;
 
     match row {
+        Ok(Some(row)) if plan_key.eq_ignore_ascii_case("enterprise") => PlanLimits {
+            clients: None,
+            contacts_per_client: None,
+            appointments_per_client: None,
+            deployments_per_client: None,
+            crews: None,
+            members_per_crew: None,
+            users: None,
+            expires_after_days: Some(row.get("expires_after_days")),
+        },
         Ok(Some(row)) => PlanLimits {
             clients: Some(row.get("clients")),
             contacts_per_client: Some(row.get("contacts_per_client")),
@@ -254,6 +276,7 @@ pub async fn plan_limits_for(db: &Db, plan_key: &str) -> PlanLimits {
             crews: Some(row.get("crews")),
             members_per_crew: Some(row.get("members_per_crew")),
             users: Some(row.get("users")),
+            expires_after_days: Some(row.get("expires_after_days")),
         },
         _ => default_plan_limits(plan_key),
     }
@@ -263,8 +286,28 @@ pub async fn free_plan_limits(db: &Db) -> PlanLimits {
     plan_limits_for(db, "free").await
 }
 
-pub async fn update_free_plan_limits(
+pub async fn pro_plan_limits(db: &Db) -> PlanLimits {
+    plan_limits_for(db, "pro").await
+}
+
+pub async fn enterprise_plan_limits(db: &Db) -> PlanLimits {
+    plan_limits_for(db, "enterprise").await
+}
+
+pub async fn plan_limits_for_tenant(db: &Db, tenant_id: i64) -> (String, PlanLimits) {
+    let plan_key = find_workspace_by_id(db, tenant_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|workspace| workspace.plan_key)
+        .unwrap_or_else(|| "free".to_string());
+    let limits = plan_limits_for(db, &plan_key).await;
+    (plan_key, limits)
+}
+
+pub async fn update_plan_limits(
     db: &Db,
+    plan_key: &str,
     limits: &crate::models::PlanLimitsForm,
 ) -> Result<(), String> {
     if limits.clients <= 0
@@ -274,6 +317,7 @@ pub async fn update_free_plan_limits(
         || limits.crews <= 0
         || limits.members_per_crew <= 0
         || limits.users <= 0
+        || limits.expires_after_days < 0
     {
         return Err("All limit values must be greater than 0.".to_string());
     }
@@ -288,8 +332,9 @@ pub async fn update_free_plan_limits(
             deployments_per_client,
             crews,
             members_per_crew,
-            users
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            users,
+            expires_after_days
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(plan_key) DO UPDATE SET
             clients = excluded.clients,
             contacts_per_client = excluded.contacts_per_client,
@@ -297,10 +342,11 @@ pub async fn update_free_plan_limits(
             deployments_per_client = excluded.deployments_per_client,
             crews = excluded.crews,
             members_per_crew = excluded.members_per_crew,
-            users = excluded.users
+            users = excluded.users,
+            expires_after_days = excluded.expires_after_days
         "#,
     )
-    .bind("free")
+    .bind(plan_key)
     .bind(limits.clients)
     .bind(limits.contacts_per_client)
     .bind(limits.appointments_per_client)
@@ -308,9 +354,65 @@ pub async fn update_free_plan_limits(
     .bind(limits.crews)
     .bind(limits.members_per_crew)
     .bind(limits.users)
+    .bind(limits.expires_after_days)
     .execute(&db.0)
     .await
-    .map_err(|err| format!("Unable to update free plan limits: {err}"))?;
+    .map_err(|err| format!("Unable to update {plan_key} plan limits: {err}"))?;
+
+    Ok(())
+}
+
+pub async fn update_free_plan_limits(
+    db: &Db,
+    limits: &crate::models::PlanLimitsForm,
+) -> Result<(), String> {
+    if !matches!(limits.expires_after_days, 0 | 30 | 60 | 90) {
+        return Err("Free plan expiry must be 0, 30, 60, or 90 days.".to_string());
+    }
+
+    update_plan_limits(db, "free", limits).await
+}
+
+pub async fn update_pro_plan_limits(
+    db: &Db,
+    limits: &crate::models::PlanLimitsForm,
+) -> Result<(), String> {
+    if !matches!(limits.expires_after_days, 180 | 210 | 240) {
+        return Err("Professional plan expiry must be 6, 7, or 8 months.".to_string());
+    }
+    update_plan_limits(db, "pro", limits).await
+}
+
+pub async fn update_enterprise_plan_expiry(
+    db: &Db,
+    expires_after_days: i64,
+) -> Result<(), String> {
+    if !matches!(expires_after_days, 365 | 395 | 425) {
+        return Err("Enterprise plan expiry must be 1 year, 1 year + 1 month, or 1 year + 2 months.".to_string());
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO plan_limits (
+            plan_key,
+            clients,
+            contacts_per_client,
+            appointments_per_client,
+            deployments_per_client,
+            crews,
+            members_per_crew,
+            users,
+            expires_after_days
+        ) VALUES (?, 0, 0, 0, 0, 0, 0, 0, ?)
+        ON CONFLICT(plan_key) DO UPDATE SET
+            expires_after_days = excluded.expires_after_days
+        "#,
+    )
+    .bind("enterprise")
+    .bind(expires_after_days)
+    .execute(&db.0)
+    .await
+    .map_err(|err| format!("Unable to update enterprise plan expiry: {err}"))?;
 
     Ok(())
 }
@@ -349,8 +451,11 @@ pub fn is_whitelabel_enabled(plan_key: &str) -> bool {
     find_plan(plan_key).map(|plan| plan.whitelabel).unwrap_or(false)
 }
 
-pub fn is_plan_expired(plan_key: &str, plan_started_at: &str) -> bool {
+pub fn is_plan_expired(plan_key: &str, plan_started_at: &str, expires_after_days: i64) -> bool {
     if !plan_key.eq_ignore_ascii_case("free") {
+        return false;
+    }
+    if expires_after_days <= 0 {
         return false;
     }
     let parsed = NaiveDateTime::parse_from_str(plan_started_at, "%Y-%m-%d %H:%M:%S");
@@ -358,8 +463,25 @@ pub fn is_plan_expired(plan_key: &str, plan_started_at: &str) -> bool {
         Ok(value) => value,
         Err(_) => return false,
     };
-    let expires_at = started_at + Duration::days(30);
+    let expires_at = started_at + Duration::days(expires_after_days);
     Utc::now().naive_utc() > expires_at
+}
+
+pub async fn is_workspace_plan_expired(db: &Db, tenant_id: i64) -> bool {
+    let workspace = match find_workspace_by_id(db, tenant_id).await {
+        Ok(Some(workspace)) => workspace,
+        _ => return false,
+    };
+    if workspace.plan_expired {
+        return true;
+    }
+    let limits = plan_limits_for(db, "free").await;
+    let expires_after_days = limits.expires_after_days.unwrap_or(0);
+    is_plan_expired(
+        &workspace.plan_key,
+        &workspace.plan_started_at,
+        expires_after_days,
+    )
 }
 
 pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
@@ -433,6 +555,7 @@ pub async fn update_workspace(
     name_input: String,
     plan_key: String,
 ) -> Result<(), WorkspaceError> {
+    let existing = find_workspace_by_id(db, id).await.ok().flatten();
     let slug = match normalize_slug(&slug_input) {
         Some(slug) => slug,
         None => {
@@ -465,7 +588,19 @@ pub async fn update_workspace(
             form: WorkspaceFormView::new(slug, name_input, plan_key.clone()),
         });
     }
+    if let Some(existing) = existing {
+        if !existing.plan_key.eq_ignore_ascii_case(&plan_key) {
+            let _ = tenant_repo::set_workspace_plan_expired(db, id, false).await;
+        }
+    }
 
+    Ok(())
+}
+
+pub async fn expire_workspace_plan(db: &Db, id: i64) -> Result<(), String> {
+    tenant_repo::set_workspace_plan_expired(db, id, true)
+        .await
+        .map_err(|err| format!("Unable to expire workspace plan: {err}"))?;
     Ok(())
 }
 

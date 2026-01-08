@@ -48,8 +48,96 @@
           <label class="form-label">Total workspace users</label>
           <input class="form-control" type="number" min="1" name="users" value="{{ free_limits.users }}" required>
         </div>
+        <div class="col-md-4">
+          <label class="form-label">Free plan expiry</label>
+          <select class="form-select" name="expires_after_days" required>
+            <option value="0" {% if free_limits.expires_after_days == 0 %}selected{% endif %}>No expiry</option>
+            <option value="30" {% if free_limits.expires_after_days == 30 %}selected{% endif %}>1 month (30 days)</option>
+            <option value="60" {% if free_limits.expires_after_days == 60 %}selected{% endif %}>2 months (60 days)</option>
+            <option value="90" {% if free_limits.expires_after_days == 90 %}selected{% endif %}>3 months (90 days)</option>
+          </select>
+        </div>
       </div>
       <button class="btn btn-primary mt-4" type="submit">Save free plan limits</button>
+    </form>
+  </div>
+
+  <div class="card glass-card p-4 mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h3 class="h5 fw-semibold mb-1">Professional plan limits</h3>
+        <p class="text-muted mb-0">Editable limits applied to Professional plan workspaces.</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/plans/pro">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Clients</label>
+          <input class="form-control" type="number" min="1" name="clients" value="{{ pro_limits.clients }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Contacts per client</label>
+          <input class="form-control" type="number" min="1" name="contacts_per_client" value="{{ pro_limits.contacts_per_client }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Appointments per client</label>
+          <input class="form-control" type="number" min="1" name="appointments_per_client" value="{{ pro_limits.appointments_per_client }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Deployments per client</label>
+          <input class="form-control" type="number" min="1" name="deployments_per_client" value="{{ pro_limits.deployments_per_client }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Crews</label>
+          <input class="form-control" type="number" min="1" name="crews" value="{{ pro_limits.crews }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Members per crew</label>
+          <input class="form-control" type="number" min="1" name="members_per_crew" value="{{ pro_limits.members_per_crew }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Total workspace users</label>
+          <input class="form-control" type="number" min="1" name="users" value="{{ pro_limits.users }}" required>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label">Minimum term</label>
+          <select class="form-select" name="expires_after_days" required>
+            <option value="180" {% if pro_limits.expires_after_days == 180 %}selected{% endif %}>6 months (180 days)</option>
+            <option value="210" {% if pro_limits.expires_after_days == 210 %}selected{% endif %}>7 months (210 days)</option>
+            <option value="240" {% if pro_limits.expires_after_days == 240 %}selected{% endif %}>8 months (240 days)</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-4" type="submit">Save professional plan limits</button>
+    </form>
+  </div>
+
+  <div class="card glass-card p-4 mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+      <div>
+        <h3 class="h5 fw-semibold mb-1">Enterprise plan term</h3>
+        <p class="text-muted mb-0">Set the minimum term for Enterprise plans.</p>
+      </div>
+    </div>
+    <form method="post" action="/admin/plans/enterprise">
+      <input type="hidden" name="clients" value="1">
+      <input type="hidden" name="contacts_per_client" value="1">
+      <input type="hidden" name="appointments_per_client" value="1">
+      <input type="hidden" name="deployments_per_client" value="1">
+      <input type="hidden" name="crews" value="1">
+      <input type="hidden" name="members_per_crew" value="1">
+      <input type="hidden" name="users" value="1">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Minimum term</label>
+          <select class="form-select" name="expires_after_days" required>
+            <option value="365" {% if enterprise_limits.expires_after_days == 365 %}selected{% endif %}>1 year (365 days)</option>
+            <option value="395" {% if enterprise_limits.expires_after_days == 395 %}selected{% endif %}>1 year + 1 month (395 days)</option>
+            <option value="425" {% if enterprise_limits.expires_after_days == 425 %}selected{% endif %}>1 year + 2 months (425 days)</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn btn-primary mt-4" type="submit">Save enterprise term</button>
     </form>
   </div>
 {% endblock content %}

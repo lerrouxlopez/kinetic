@@ -134,6 +134,8 @@ pub async fn admin_plans(
         None => return Err(Redirect::to(uri!(admin_login_form))),
     };
     let limits = workspace_service::free_plan_limits(db).await;
+    let pro_limits = workspace_service::pro_plan_limits(db).await;
+    let enterprise_limits = workspace_service::enterprise_plan_limits(db).await;
 
     Ok(Template::render(
         "admin/plans",
@@ -149,6 +151,20 @@ pub async fn admin_plans(
                 crews: limits.crews.unwrap_or(0),
                 members_per_crew: limits.members_per_crew.unwrap_or(0),
                 users: limits.users.unwrap_or(0),
+                expires_after_days: limits.expires_after_days.unwrap_or(0),
+            },
+            pro_limits: context! {
+                clients: pro_limits.clients.unwrap_or(0),
+                contacts_per_client: pro_limits.contacts_per_client.unwrap_or(0),
+                appointments_per_client: pro_limits.appointments_per_client.unwrap_or(0),
+                deployments_per_client: pro_limits.deployments_per_client.unwrap_or(0),
+                crews: pro_limits.crews.unwrap_or(0),
+                members_per_crew: pro_limits.members_per_crew.unwrap_or(0),
+                users: pro_limits.users.unwrap_or(0),
+                expires_after_days: pro_limits.expires_after_days.unwrap_or(180),
+            },
+            enterprise_limits: context! {
+                expires_after_days: enterprise_limits.expires_after_days.unwrap_or(365),
             },
         },
     ))
@@ -182,6 +198,134 @@ pub async fn admin_plans_update(
                     crews: form.crews,
                     members_per_crew: form.members_per_crew,
                     users: form.users,
+                    expires_after_days: form.expires_after_days,
+                },
+                pro_limits: {
+                    let pro_limits = workspace_service::pro_plan_limits(db).await;
+                    context! {
+                        clients: pro_limits.clients.unwrap_or(0),
+                        contacts_per_client: pro_limits.contacts_per_client.unwrap_or(0),
+                        appointments_per_client: pro_limits.appointments_per_client.unwrap_or(0),
+                        deployments_per_client: pro_limits.deployments_per_client.unwrap_or(0),
+                        crews: pro_limits.crews.unwrap_or(0),
+                        members_per_crew: pro_limits.members_per_crew.unwrap_or(0),
+                        users: pro_limits.users.unwrap_or(0),
+                        expires_after_days: pro_limits.expires_after_days.unwrap_or(180),
+                    }
+                },
+                enterprise_limits: {
+                    let enterprise_limits = workspace_service::enterprise_plan_limits(db).await;
+                    context! {
+                        expires_after_days: enterprise_limits.expires_after_days.unwrap_or(365),
+                    }
+                },
+            },
+        )),
+    }
+}
+
+#[post("/admin/plans/pro", data = "<form>")]
+pub async fn admin_plans_update_pro(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    form: Form<PlanLimitsForm>,
+) -> Result<Redirect, Template> {
+    let admin = match admin_from_cookies(cookies, db).await {
+        Some(admin) => admin,
+        None => return Ok(Redirect::to(uri!(admin_login_form))),
+    };
+    let form = form.into_inner();
+
+    match workspace_service::update_pro_plan_limits(db, &form).await {
+        Ok(_) => Ok(Redirect::to(uri!(admin_plans))),
+        Err(message) => Err(Template::render(
+            "admin/plans",
+            context! {
+                title: "Plans",
+                admin_email: admin.email,
+                error: message,
+                free_limits: {
+                    let free_limits = workspace_service::free_plan_limits(db).await;
+                    context! {
+                        clients: free_limits.clients.unwrap_or(0),
+                        contacts_per_client: free_limits.contacts_per_client.unwrap_or(0),
+                        appointments_per_client: free_limits.appointments_per_client.unwrap_or(0),
+                        deployments_per_client: free_limits.deployments_per_client.unwrap_or(0),
+                        crews: free_limits.crews.unwrap_or(0),
+                        members_per_crew: free_limits.members_per_crew.unwrap_or(0),
+                        users: free_limits.users.unwrap_or(0),
+                        expires_after_days: free_limits.expires_after_days.unwrap_or(0),
+                    }
+                },
+                pro_limits: context! {
+                    clients: form.clients,
+                    contacts_per_client: form.contacts_per_client,
+                    appointments_per_client: form.appointments_per_client,
+                    deployments_per_client: form.deployments_per_client,
+                    crews: form.crews,
+                    members_per_crew: form.members_per_crew,
+                    users: form.users,
+                    expires_after_days: form.expires_after_days,
+                },
+                enterprise_limits: {
+                    let enterprise_limits = workspace_service::enterprise_plan_limits(db).await;
+                    context! {
+                        expires_after_days: enterprise_limits.expires_after_days.unwrap_or(365),
+                    }
+                },
+            },
+        )),
+    }
+}
+
+#[post("/admin/plans/enterprise", data = "<form>")]
+pub async fn admin_plans_update_enterprise(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    form: Form<PlanLimitsForm>,
+) -> Result<Redirect, Template> {
+    let admin = match admin_from_cookies(cookies, db).await {
+        Some(admin) => admin,
+        None => return Ok(Redirect::to(uri!(admin_login_form))),
+    };
+    let form = form.into_inner();
+
+    match workspace_service::update_enterprise_plan_expiry(db, form.expires_after_days).await {
+        Ok(_) => Ok(Redirect::to(uri!(admin_plans))),
+        Err(message) => Err(Template::render(
+            "admin/plans",
+            context! {
+                title: "Plans",
+                admin_email: admin.email,
+                error: message,
+                free_limits: {
+                    let free_limits = workspace_service::free_plan_limits(db).await;
+                    context! {
+                        clients: free_limits.clients.unwrap_or(0),
+                        contacts_per_client: free_limits.contacts_per_client.unwrap_or(0),
+                        appointments_per_client: free_limits.appointments_per_client.unwrap_or(0),
+                        deployments_per_client: free_limits.deployments_per_client.unwrap_or(0),
+                        crews: free_limits.crews.unwrap_or(0),
+                        members_per_crew: free_limits.members_per_crew.unwrap_or(0),
+                        users: free_limits.users.unwrap_or(0),
+                        expires_after_days: free_limits.expires_after_days.unwrap_or(0),
+                    }
+                },
+                pro_limits: {
+                    let pro_limits = workspace_service::pro_plan_limits(db).await;
+                    context! {
+                        clients: pro_limits.clients.unwrap_or(0),
+                        contacts_per_client: pro_limits.contacts_per_client.unwrap_or(0),
+                        appointments_per_client: pro_limits.appointments_per_client.unwrap_or(0),
+                        deployments_per_client: pro_limits.deployments_per_client.unwrap_or(0),
+                        crews: pro_limits.crews.unwrap_or(0),
+                        members_per_crew: pro_limits.members_per_crew.unwrap_or(0),
+                        users: pro_limits.users.unwrap_or(0),
+                        expires_after_days: pro_limits.expires_after_days.unwrap_or(180),
+                    }
+                },
+                enterprise_limits: context! {
+                    expires_after_days: form.expires_after_days,
                 },
             },
         )),
@@ -414,7 +558,7 @@ pub async fn admin_user_update(
         None => return Ok(Redirect::to(uri!(admin_login_form))),
     };
     let form = form.into_inner();
-    let mut user = match user_repo::find_user_by_id_any(db, id).await {
+    let user = match user_repo::find_user_by_id_any(db, id).await {
         Ok(Some(user)) => user,
         _ => {
             let users = user_repo::list_users_all(db).await.unwrap_or_default();
@@ -766,6 +910,44 @@ pub async fn admin_workspace_delete(
                 pagination: pagination_view(1, 0, |target_page| {
                     format!("/admin/workspaces?page={}", target_page)
                 }),
+                error: message,
+            },
+        ));
+    }
+
+    Ok(Redirect::to(uri!(admin_workspaces(
+        page = Option::<usize>::None
+    ))))
+}
+
+#[post("/admin/workspaces/<id>/expire")]
+pub async fn admin_workspace_expire(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    id: i64,
+) -> Result<Redirect, Template> {
+    let admin = match admin_from_cookies(cookies, db).await {
+        Some(admin) => admin,
+        None => return Ok(Redirect::to(uri!(admin_login_form))),
+    };
+
+    if let Err(message) = workspace_service::expire_workspace_plan(db, id).await {
+        let page = 1;
+        let offset = 0;
+        let workspaces = workspace_service::list_workspaces_paged(db, PER_PAGE as i64, offset)
+            .await
+            .unwrap_or_default();
+        let total_workspaces = workspace_service::count_workspaces(db).await.unwrap_or(0);
+        let pagination = pagination_view(page, total_workspaces, |target_page| {
+            format!("/admin/workspaces?page={}", target_page)
+        });
+        return Err(Template::render(
+            "admin/workspaces",
+            context! {
+                title: "Workspaces",
+                admin_email: admin.email,
+                workspaces: workspaces,
+                pagination: pagination,
                 error: message,
             },
         ));

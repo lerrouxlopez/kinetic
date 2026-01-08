@@ -52,6 +52,7 @@ pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
                background_hue,
                plan_key,
                plan_started_at,
+               plan_expired,
                email_provider,
                email_from_name,
                email_from_address,
@@ -87,6 +88,7 @@ pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
             background_hue: row.get("background_hue"),
             plan_key: row.get("plan_key"),
             plan_started_at: row.get("plan_started_at"),
+            plan_expired: row.get::<i64, _>("plan_expired") == 1,
             email_provider: row.get("email_provider"),
             email_from_name: row.get("email_from_name"),
             email_from_address: row.get("email_from_address"),
@@ -123,6 +125,7 @@ pub async fn list_workspaces_paged(
                background_hue,
                plan_key,
                plan_started_at,
+               plan_expired,
                email_provider,
                email_from_name,
                email_from_address,
@@ -161,6 +164,7 @@ pub async fn list_workspaces_paged(
             background_hue: row.get("background_hue"),
             plan_key: row.get("plan_key"),
             plan_started_at: row.get("plan_started_at"),
+            plan_expired: row.get::<i64, _>("plan_expired") == 1,
             email_provider: row.get("email_provider"),
             email_from_name: row.get("email_from_name"),
             email_from_address: row.get("email_from_address"),
@@ -203,6 +207,7 @@ pub async fn find_workspace_by_id(
                background_hue,
                plan_key,
                plan_started_at,
+               plan_expired,
                email_provider,
                email_from_name,
                email_from_address,
@@ -237,6 +242,7 @@ pub async fn find_workspace_by_id(
         background_hue: row.get("background_hue"),
         plan_key: row.get("plan_key"),
         plan_started_at: row.get("plan_started_at"),
+        plan_expired: row.get::<i64, _>("plan_expired") == 1,
         email_provider: row.get("email_provider"),
         email_from_name: row.get("email_from_name"),
         email_from_address: row.get("email_from_address"),
@@ -267,6 +273,20 @@ pub async fn update_workspace(
         .bind(slug)
         .bind(name)
         .bind(plan_key)
+        .bind(id)
+        .execute(&db.0)
+        .await?;
+    Ok(())
+}
+
+pub async fn set_workspace_plan_expired(
+    db: &Db,
+    id: i64,
+    expired: bool,
+) -> Result<(), sqlx::Error> {
+    let expired_value = if expired { 1 } else { 0 };
+    sqlx::query("UPDATE tenants SET plan_expired = ? WHERE id = ?")
+        .bind(expired_value)
         .bind(id)
         .execute(&db.0)
         .await?;

@@ -46,6 +46,7 @@ pub struct PlanLimitsForm {
     pub crews: i64,
     pub members_per_crew: i64,
     pub users: i64,
+    pub expires_after_days: i64,
 }
 
 #[derive(FromForm)]
@@ -171,6 +172,7 @@ pub struct User {
     pub tenant_id: i64,
     pub tenant_slug: String,
     pub plan_key: String,
+    pub plan_expired: bool,
     pub email: String,
     pub role: String,
     pub is_super_admin: bool,
@@ -192,6 +194,7 @@ pub struct Workspace {
     pub background_hue: i64,
     pub plan_key: String,
     pub plan_started_at: String,
+    pub plan_expired: bool,
     pub email_provider: String,
     pub email_from_name: String,
     pub email_from_address: String,
@@ -587,6 +590,7 @@ pub struct CurrentUserView {
     pub tenant_slug: String,
     pub email: String,
     pub plan_key: String,
+    pub plan_expired: bool,
 }
 
 impl From<&User> for CurrentUserView {
@@ -595,6 +599,7 @@ impl From<&User> for CurrentUserView {
             tenant_slug: user.tenant_slug.clone(),
             email: user.email.clone(),
             plan_key: user.plan_key.clone(),
+            plan_expired: user.plan_expired,
         }
     }
 }

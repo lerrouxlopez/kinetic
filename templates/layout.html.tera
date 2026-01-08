@@ -61,6 +61,10 @@
               <a class="btn btn-primary btn-sm" href="/{{ current_user.tenant_slug }}/plans">Upgrade</a>
             {% endif %}
             <a class="btn btn-outline-light btn-sm" href="/logout">Log out</a>
+          {% elif admin_email is defined %}
+            <span class="text-muted small">Workspace: admin</span>
+            <a class="btn btn-outline-light btn-sm" href="/admin/dashboard">Dashboard</a>
+            <a class="btn btn-outline-light btn-sm" href="/admin/logout">Log out</a>
           {% else %}
             <a class="btn btn-outline-light btn-sm" href="/login">Log in</a>
             <a class="btn btn-primary btn-sm" href="/register">Create workspace</a>
@@ -68,6 +72,16 @@
         </div>
       </div>
     </nav>
+    {% if current_user and current_user.plan_expired %}
+      <div class="container">
+        <div class="alert alert-warning d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3">
+          <div>
+            <strong>Plan expired.</strong> Upgrade to resume changes. You can still view your data.
+          </div>
+          <a class="btn btn-sm btn-primary" href="/{{ current_user.tenant_slug }}/plans">Upgrade now</a>
+        </div>
+      </div>
+    {% endif %}
     <main class="container py-5">
       {% block content %}{% endblock content %}
     </main>

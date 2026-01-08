@@ -156,6 +156,12 @@ pub async fn clients_index(
     let pagination = pagination_view(page, total_clients, |target_page| {
         format!("/{}/clients?page={}", tenant_slug, target_page)
     });
+    let (_plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    let client_limit = limits.clients.unwrap_or(0);
+    let client_limit_reached = limits
+        .clients
+        .map(|limit| total_clients >= limit)
+        .unwrap_or(false);
 
     Ok(Template::render(
         "clients/index",
@@ -165,6 +171,8 @@ pub async fn clients_index(
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             clients: clients,
             pagination: pagination,
+            client_limit: client_limit,
+            client_limit_reached: client_limit_reached,
         },
     ))
 }
@@ -338,6 +346,17 @@ pub async fn client_show(
         });
     let appointments_count = total_appointments as usize;
     let deployments_count = 0;
+    let (_plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    let contacts_limit = limits.contacts_per_client.unwrap_or(0);
+    let contacts_limit_reached = limits
+        .contacts_per_client
+        .map(|limit| total_contacts >= limit)
+        .unwrap_or(false);
+    let appointments_limit = limits.appointments_per_client.unwrap_or(0);
+    let appointments_limit_reached = limits
+        .appointments_per_client
+        .map(|limit| total_appointments >= limit)
+        .unwrap_or(false);
 
     Ok(Template::render(
         "clients/show",
@@ -353,6 +372,10 @@ pub async fn client_show(
             deployments_count: deployments_count,
             contacts_pagination: contacts_pagination,
             appointments_pagination: appointments_pagination,
+            contacts_limit: contacts_limit,
+            contacts_limit_reached: contacts_limit_reached,
+            appointments_limit: appointments_limit,
+            appointments_limit_reached: appointments_limit_reached,
         },
     ))
 }

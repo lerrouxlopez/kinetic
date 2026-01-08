@@ -650,6 +650,8 @@ pub async fn plans(
         .unwrap_or_else(|| user.plan_key.clone());
     let current_plan = workspace_service::find_plan(&current_plan_key);
     let upgrade_options = workspace_service::upgrade_options(&current_plan_key);
+    let free_plan_limits = workspace_service::free_plan_limits(db).await;
+    let free_plan_expiry_days = free_plan_limits.expires_after_days.unwrap_or(0);
 
     Ok(Template::render(
         "workspace/plans",
@@ -660,6 +662,7 @@ pub async fn plans(
             current_plan_key: current_plan_key,
             current_plan: current_plan,
             upgrade_options: upgrade_options,
+            free_plan_expiry_days: free_plan_expiry_days,
         },
     ))
 }
@@ -1041,6 +1044,9 @@ pub async fn settings_theme_update(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if access_service::is_plan_expired(db, &user).await {
+        return Ok(Redirect::to(uri!(plans(slug = user.tenant_slug))));
+    }
     if !access_service::is_owner(&user.role) {
         return Ok(Redirect::to(uri!(settings(
             slug = user.tenant_slug,
@@ -1263,6 +1269,9 @@ pub async fn settings_users_update(
         Ok(user) => user,
         Err(redirect) => return Ok(redirect),
     };
+    if access_service::is_plan_expired(db, &user).await {
+        return Ok(Redirect::to(uri!(plans(slug = user.tenant_slug))));
+    }
     if !access_service::is_owner(&user.role) {
         return Ok(Redirect::to(uri!(settings(
             slug = user.tenant_slug,
@@ -1391,9 +1400,20 @@ pub async fn deployments(
             .await
             .unwrap_or_default()
     };
+    let (_plan_key, limits) = workspace_service::plan_limits_for_tenant(db, user.tenant_id).await;
+    let deployment_limit = limits.deployments_per_client;
+    let deployment_limit_reached = deployment_limit
+        .map(|limit| {
+            !groups.is_empty()
+                && groups
+                    .iter()
+                    .all(|group| group.deployments.len() as i64 >= limit)
+        })
+        .unwrap_or(false);
     let deployments = groups
         .into_iter()
         .map(|group| {
+            let deployment_count = group.deployments.len() as i64;
             let items = group
                 .deployments
                 .into_iter()
@@ -1420,6 +1440,9 @@ pub async fn deployments(
                 client_id: group.client_id,
                 client_name: group.client_name,
                 client_currency: group.client_currency,
+                limit_reached: deployment_limit
+                    .map(|limit| deployment_count >= limit)
+                    .unwrap_or(false),
                 deployments: items,
             }
         })
@@ -1431,6 +1454,8 @@ pub async fn deployments(
             current_user: Some(CurrentUserView::from(&user)),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             deployments: deployments,
+            deployment_limit: deployment_limit.unwrap_or(0),
+            deployment_limit_reached: deployment_limit_reached,
         },
     ))
 }

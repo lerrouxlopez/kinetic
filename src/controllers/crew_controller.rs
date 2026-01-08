@@ -111,10 +111,12 @@ pub async fn crew_index(
         .await
         .unwrap_or_default();
     let stats = crew_service::stats_from_crews(&all_crews);
-    let is_free_plan = user.plan_key.eq_ignore_ascii_case("free");
-    let free_limits = workspace_service::free_plan_limits(db).await;
-    let crew_limit = free_limits.crews.unwrap_or(2) as usize;
-    let crew_limit_reached = is_free_plan && stats.total_crews >= crew_limit;
+    let (_plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    let crew_limit = limits.crews.unwrap_or(0) as usize;
+    let crew_limit_reached = limits
+        .crews
+        .map(|limit| stats.total_crews >= limit as usize)
+        .unwrap_or(false);
     let page = normalize_page(page);
     let offset = ((page - 1) * PER_PAGE) as i64;
     let crews = crew_service::list_crews_paged(db, tenant_id, PER_PAGE as i64, offset)
@@ -197,10 +199,12 @@ pub async fn crew_show(
             tenant_slug, id, target_page
         )
     });
-    let is_free_plan = user.plan_key.eq_ignore_ascii_case("free");
-    let free_limits = workspace_service::free_plan_limits(db).await;
-    let member_limit = free_limits.members_per_crew.unwrap_or(5);
-    let member_limit_reached = is_free_plan && total_members >= member_limit;
+    let (_plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    let member_limit = limits.members_per_crew.unwrap_or(0);
+    let member_limit_reached = limits
+        .members_per_crew
+        .map(|limit| total_members >= limit)
+        .unwrap_or(false);
 
     Ok(Template::render(
         "crew/show",

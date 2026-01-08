@@ -93,16 +93,16 @@ pub async fn create_deployment(
             ),
         });
     }
-    if workspace_service::is_free_plan(db, tenant_id).await {
-        let limits = workspace_service::free_plan_limits(db).await;
-        let limit = limits.deployments_per_client.unwrap_or(1);
+    let (plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    if let Some(limit) = limits.deployments_per_client {
         let existing = deployment_repo::count_deployments_by_client(db, tenant_id, form.client_id)
             .await
             .unwrap_or(0);
         if existing >= limit {
+            let plan_name = workspace_service::plan_name(&plan_key);
             return Err(DeploymentError {
                 message: format!(
-                    "Free plan workspaces can have {limit} deployments per client. Upgrade to add more."
+                    "{plan_name} plan workspaces can have {limit} deployments per client. Upgrade to add more."
                 ),
                 form: DeploymentFormView::new(
                     form.client_id,

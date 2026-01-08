@@ -84,16 +84,16 @@ pub async fn create_appointment(
     contact_id: i64,
     form: AppointmentForm,
 ) -> Result<(), AppointmentError> {
-    if workspace_service::is_free_plan(db, tenant_id).await {
-        let limits = workspace_service::free_plan_limits(db).await;
-        let limit = limits.appointments_per_client.unwrap_or(20);
+    let (plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    if let Some(limit) = limits.appointments_per_client {
         let existing = appointment_repo::count_appointments_by_client(db, tenant_id, client_id)
             .await
             .unwrap_or(0);
         if existing >= limit {
+            let plan_name = workspace_service::plan_name(&plan_key);
             return Err(AppointmentError {
                 message: format!(
-                    "Free plan workspaces can have up to {limit} appointments per client. Upgrade to add more."
+                    "{plan_name} plan workspaces can have up to {limit} appointments per client. Upgrade to add more."
                 ),
                 form: AppointmentFormView::new(
                     form.title,

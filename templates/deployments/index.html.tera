@@ -9,7 +9,11 @@
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/dashboard">Back to dashboard</a>
-        <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/deployments/new">New deployment</a>
+        {% if deployment_limit_reached | default(value=false) %}
+          <button class="btn btn-primary" type="button" disabled title="Plan limit reached ({{ deployment_limit | default(value=0) }} deployments per client). Upgrade to add more.">New deployment</button>
+        {% else %}
+          <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/deployments/new">New deployment</a>
+        {% endif %}
       </div>
     </div>
 
@@ -26,7 +30,11 @@
             <div class="text-muted text-uppercase small">Client</div>
             <div class="fw-semibold">{{ group.client_name }}</div>
           </div>
-          <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/deployments/new">Add deployment</a>
+          {% if group.limit_reached | default(value=false) %}
+            <button class="btn btn-sm btn-outline-primary" type="button" disabled title="Plan limit reached ({{ deployment_limit | default(value=0) }} deployments per client). Upgrade to add more.">Add deployment</button>
+          {% else %}
+            <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/deployments/new">Add deployment</a>
+          {% endif %}
         </div>
         <div class="table-responsive">
           <table class="table align-middle mb-0">

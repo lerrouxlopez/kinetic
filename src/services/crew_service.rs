@@ -125,14 +125,14 @@ pub async fn create_crew(
     tenant_id: i64,
     form: CrewForm,
 ) -> Result<(), CrewError> {
-    if workspace_service::is_free_plan(db, tenant_id).await {
-        let limits = workspace_service::free_plan_limits(db).await;
-        let limit = limits.crews.unwrap_or(2);
+    let (plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    if let Some(limit) = limits.crews {
         let existing = crew_repo::count_crews(db, tenant_id).await.unwrap_or(0);
         if existing >= limit {
+            let plan_name = workspace_service::plan_name(&plan_key);
             return Err(CrewError {
                 message: format!(
-                    "Free plan workspaces can have up to {limit} crews. Upgrade to add more."
+                    "{plan_name} plan workspaces can have up to {limit} crews. Upgrade to add more."
                 ),
                 form: CrewFormView::new(form.name, form.status),
             });
@@ -197,16 +197,16 @@ pub async fn create_member(
     crew_id: i64,
     form: CrewMemberForm,
 ) -> Result<(), CrewMemberError> {
-    if workspace_service::is_free_plan(db, tenant_id).await {
-        let limits = workspace_service::free_plan_limits(db).await;
-        let limit = limits.members_per_crew.unwrap_or(5);
+    let (plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    if let Some(limit) = limits.members_per_crew {
         let existing = crew_member_repo::count_members(db, tenant_id, crew_id)
             .await
             .unwrap_or(0);
         if existing >= limit {
+            let plan_name = workspace_service::plan_name(&plan_key);
             return Err(CrewMemberError {
                 message: format!(
-                    "Free plan workspaces can have up to {limit} members per crew. Upgrade to add more."
+                    "{plan_name} plan workspaces can have up to {limit} members per crew. Upgrade to add more."
                 ),
                 form: CrewMemberFormView::new(form.user_id, form.name, form.phone, form.position),
             });

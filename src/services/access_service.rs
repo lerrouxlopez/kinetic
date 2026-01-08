@@ -4,6 +4,7 @@ use rocket_db_pools::sqlx;
 
 use crate::models::{User, UserPermission};
 use crate::repositories::{user_permission_repo, user_repo};
+use crate::services::workspace_service;
 use crate::Db;
 
 pub const RESOURCES: [(&str, &str); 7] = [
@@ -95,9 +96,16 @@ pub async fn can_delete(db: &Db, user: &User, resource: &str) -> bool {
     can_action(db, user, resource, "delete").await
 }
 
+pub async fn is_plan_expired(db: &Db, user: &User) -> bool {
+    workspace_service::is_workspace_plan_expired(db, user.tenant_id).await
+}
+
 async fn can_action(db: &Db, user: &User, resource: &str, action: &str) -> bool {
     if user.is_super_admin {
         return true;
+    }
+    if action != "view" && workspace_service::is_workspace_plan_expired(db, user.tenant_id).await {
+        return false;
     }
     let role = normalize_role(&user.role);
     if role.eq_ignore_ascii_case(ROLE_OWNER) {

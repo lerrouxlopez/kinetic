@@ -16,6 +16,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
               background_hue INTEGER NOT NULL DEFAULT 32,
               plan_key TEXT NOT NULL DEFAULT 'free',
               plan_started_at TEXT NOT NULL DEFAULT (datetime('now')),
+              plan_expired INTEGER NOT NULL DEFAULT 0,
               email_provider TEXT NOT NULL DEFAULT 'Mailtrap',
               email_from_name TEXT NOT NULL DEFAULT '',
               email_from_address TEXT NOT NULL DEFAULT '',
@@ -417,6 +418,11 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
         .await,
     );
     ignore_duplicate_column(
+        sqlx::query("ALTER TABLE tenants ADD COLUMN plan_expired INTEGER NOT NULL DEFAULT 0")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
         sqlx::query("ALTER TABLE client_contacts ADD COLUMN is_rogue INTEGER NOT NULL DEFAULT 0")
             .execute(&db.0)
             .await,
@@ -453,19 +459,29 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             deployments_per_client INTEGER NOT NULL,
             crews INTEGER NOT NULL,
             members_per_crew INTEGER NOT NULL,
-            users INTEGER NOT NULL
+            users INTEGER NOT NULL,
+            expires_after_days INTEGER NOT NULL DEFAULT 30
         )
         "#,
     )
     .execute(&db.0)
     .await?;
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE plan_limits ADD COLUMN expires_after_days INTEGER NOT NULL DEFAULT 30",
+        )
+        .execute(&db.0)
+        .await,
+    );
 
     sqlx::query(
         r#"
         INSERT OR IGNORE INTO plan_limits
-            (plan_key, clients, contacts_per_client, appointments_per_client, deployments_per_client, crews, members_per_crew, users)
+            (plan_key, clients, contacts_per_client, appointments_per_client, deployments_per_client, crews, members_per_crew, users, expires_after_days)
         VALUES
-            ('free', 5, 5, 20, 1, 2, 5, 11)
+            ('free', 5, 5, 20, 1, 2, 5, 11, 30),
+            ('pro', 20, 5, 40, 5, 5, 10, 51, 180),
+            ('enterprise', 0, 0, 0, 0, 0, 0, 0, 365)
         "#,
     )
     .execute(&db.0)

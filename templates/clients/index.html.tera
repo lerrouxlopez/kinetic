@@ -9,7 +9,11 @@
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/dashboard">Back to dashboard</a>
-        <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/clients/new">New client</a>
+        {% if client_limit_reached | default(value=false) %}
+          <button class="btn btn-primary" type="button" disabled title="Plan limit reached ({{ client_limit | default(value=0) }} clients). Upgrade to add more.">New client</button>
+        {% else %}
+          <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/clients/new">New client</a>
+        {% endif %}
       </div>
     </div>
 

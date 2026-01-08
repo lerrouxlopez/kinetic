@@ -10,7 +10,7 @@
       <div class="d-flex gap-2">
         <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/dashboard">Back to dashboard</a>
       {% if crew_limit_reached %}
-        <button class="btn btn-primary" type="button" disabled title="Free plan limit reached ({{ crew_limit }} crews). Upgrade to add more.">New crew</button>
+        <button class="btn btn-primary" type="button" disabled title="Plan limit reached ({{ crew_limit }} crews). Upgrade to add more.">New crew</button>
       {% else %}
         <a class="btn btn-primary" href="/{{ current_user.tenant_slug }}/crew/new">New crew</a>
       {% endif %}

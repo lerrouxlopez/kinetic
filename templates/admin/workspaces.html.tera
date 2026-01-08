@@ -32,6 +32,9 @@
               <td>{{ workspace.name }}</td>
               <td class="text-end">
                 <a class="btn btn-sm btn-outline-light" href="/admin/workspaces/{{ workspace.id }}/edit">Edit</a>
+                <form class="d-inline" method="post" action="/admin/workspaces/{{ workspace.id }}/expire" onsubmit="return confirm('Expire this workspace plan? Users will be able to view data but cannot make changes until they upgrade.');">
+                  <button class="btn btn-sm btn-outline-warning" type="submit">Expire plan</button>
+                </form>
                 <form class="d-inline" method="post" action="/admin/workspaces/{{ workspace.id }}/delete" onsubmit="return confirm('Delete this workspace and all of its data? This will remove clients, contacts, appointments, deployments, crews, invoices, tracking, emails, users, and permissions.');">
                   <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
                 </form>

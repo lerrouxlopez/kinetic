@@ -41,7 +41,17 @@
                 <li>2 crews.</li>
                 <li>5 members per crew.</li>
                 <li>11 total workspace users.</li>
-                <li>Workspace limited to 1 month; owner must upgrade after 1 month.</li>
+                {% if free_plan_expiry_days == 30 %}
+                  <li>Workspace limited to 1 month; owner must upgrade after 1 month.</li>
+                {% elif free_plan_expiry_days == 60 %}
+                  <li>Workspace limited to 2 months; owner must upgrade after 2 months.</li>
+                {% elif free_plan_expiry_days == 90 %}
+                  <li>Workspace limited to 3 months; owner must upgrade after 3 months.</li>
+                {% elif free_plan_expiry_days > 0 %}
+                  <li>Workspace limited to {{ free_plan_expiry_days }} days; owner must upgrade after that.</li>
+                {% else %}
+                  <li>No workspace expiry.</li>
+                {% endif %}
               </ul>
             {% elif plan.key == "pro" %}
               <ul class="text-muted small mt-3 mb-0">

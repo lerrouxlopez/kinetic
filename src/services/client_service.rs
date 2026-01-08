@@ -71,14 +71,14 @@ pub async fn create_client(
     tenant_id: i64,
     form: ClientForm,
 ) -> Result<(), ClientError> {
-    if workspace_service::is_free_plan(db, tenant_id).await {
-        let limits = workspace_service::free_plan_limits(db).await;
-        let limit = limits.clients.unwrap_or(5);
+    let (plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    if let Some(limit) = limits.clients {
         let existing = client_repo::count_clients(db, tenant_id).await.unwrap_or(0);
         if existing >= limit {
+            let plan_name = workspace_service::plan_name(&plan_key);
             return Err(ClientError {
                 message: format!(
-                    "Free plan workspaces can have up to {limit} clients. Upgrade to add more."
+                    "{plan_name} plan workspaces can have up to {limit} clients. Upgrade to add more."
                 ),
                 form: ClientFormView::new(
                     form.company_name,
@@ -317,16 +317,16 @@ pub async fn create_contact(
     client_id: i64,
     form: ClientContactForm,
 ) -> Result<(), ContactError> {
-    if workspace_service::is_free_plan(db, tenant_id).await {
-        let limits = workspace_service::free_plan_limits(db).await;
-        let limit = limits.contacts_per_client.unwrap_or(5);
+    let (plan_key, limits) = workspace_service::plan_limits_for_tenant(db, tenant_id).await;
+    if let Some(limit) = limits.contacts_per_client {
         let existing = client_repo::count_contacts(db, tenant_id, client_id)
             .await
             .unwrap_or(0);
         if existing >= limit {
+            let plan_name = workspace_service::plan_name(&plan_key);
             return Err(ContactError {
                 message: format!(
-                    "Free plan workspaces can have up to {limit} contacts per client. Upgrade to add more."
+                    "{plan_name} plan workspaces can have up to {limit} contacts per client. Upgrade to add more."
                 ),
                 form: ClientContactFormView::new(
                     form.name,
