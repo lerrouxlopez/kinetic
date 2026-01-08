@@ -149,6 +149,11 @@ pub struct DeploymentUpdateForm {
 }
 
 #[derive(FromForm)]
+pub struct WorkTimerForm {
+    pub deployment_id: i64,
+}
+
+#[derive(FromForm)]
 pub struct InvoiceForm {
     pub deployment_id: i64,
     pub status: String,
@@ -309,11 +314,24 @@ pub struct DeploymentUpdate {
     pub id: i64,
     pub tenant_id: i64,
     pub deployment_id: i64,
+    pub user_id: Option<i64>,
+    pub user_email: String,
     pub work_date: String,
     pub start_time: String,
     pub end_time: String,
     pub hours_worked: f64,
     pub notes: String,
+    pub is_placeholder: bool,
+}
+
+#[derive(Serialize, Clone)]
+pub struct WorkTimer {
+    pub id: i64,
+    pub tenant_id: i64,
+    pub deployment_id: i64,
+    pub user_id: i64,
+    pub start_at: String,
+    pub end_at: Option<String>,
 }
 
 #[derive(Serialize, Clone)]

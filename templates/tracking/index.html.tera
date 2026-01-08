@@ -18,7 +18,7 @@
 
     <div class="card glass-card p-4 mb-4">
       <div class="row g-3 align-items-end">
-        <div class="col-lg-7">
+        <div class="col-lg-6">
           <label class="form-label">Deployment</label>
           <form method="get" action="/{{ current_user.tenant_slug }}/tracking">
             <div class="d-flex gap-2">
@@ -37,42 +37,63 @@
             </div>
           </form>
         </div>
-        <div class="col-lg-5 text-muted small">
+        <div class="col-lg-3">
+          {% if selected_deployment and selected_deployment > 0 %}
+            {% if active_timer and active_timer.deployment_id == selected_deployment %}
+              <form method="post" action="/{{ current_user.tenant_slug }}/tracking/stop">
+                <input type="hidden" name="deployment_id" value="{{ selected_deployment }}">
+                <button class="btn btn-outline-danger w-100" type="submit">Stop work</button>
+                <div class="text-muted small mt-2">Started at {{ active_timer.start_at }}</div>
+              </form>
+            {% else %}
+              <form method="post" action="/{{ current_user.tenant_slug }}/tracking/start">
+                <input type="hidden" name="deployment_id" value="{{ selected_deployment }}">
+                <button class="btn btn-outline-primary w-100" type="submit" {% if active_timer %}disabled{% endif %}>Start work</button>
+                {% if active_timer %}
+                  <div class="text-muted small mt-2">Finish the active timer first.</div>
+                {% endif %}
+              </form>
+            {% endif %}
+          {% endif %}
+        </div>
+        <div class="col-lg-3 text-muted small">
           Each work day requires a single update with start/finish times.
         </div>
       </div>
     </div>
 
-    <div class="card glass-card p-4 mb-4">
-      <h3 class="h6 fw-semibold mb-3">Hours worked</h3>
-      {% if chart_data.points | length == 0 %}
-        <div class="text-muted">No updates yet.</div>
-      {% else %}
-        <div class="tracking-area-chart">
-          <svg viewBox="0 0 {{ chart_data.width }} {{ chart_data.height }}" role="img" aria-label="Hours worked by day">
-            <defs>
-              <linearGradient id="hoursGradient" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stop-color="var(--kinetic-chart-start)" stop-opacity="0.6"></stop>
-                <stop offset="100%" stop-color="var(--kinetic-chart-end)" stop-opacity="0.08"></stop>
-              </linearGradient>
-            </defs>
-            <path d="{{ chart_data.area_path }}" fill="url(#hoursGradient)"></path>
-            <path d="{{ chart_data.path }}" fill="none" stroke="var(--kinetic-chart-stroke)" stroke-width="3"></path>
-            {% for point in chart_data.points %}
-              <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4.5" fill="var(--kinetic-chart-point)"></circle>
-            {% endfor %}
-          </svg>
-          <div class="tracking-chart-labels">
-            {% for point in chart_data.points %}
-              <div class="tracking-chart-label">
-                <div class="text-muted small">{{ point.work_date }}</div>
-                <div class="fw-semibold small">{{ point.hours_worked }}h</div>
-              </div>
-            {% endfor %}
+    {% if not is_employee %}
+      <div class="card glass-card p-4 mb-4">
+        <h3 class="h6 fw-semibold mb-3">Hours worked</h3>
+        {% if chart_data.points | length == 0 %}
+          <div class="text-muted">No updates yet.</div>
+        {% else %}
+          <div class="tracking-area-chart">
+            <svg viewBox="0 0 {{ chart_data.width }} {{ chart_data.height }}" role="img" aria-label="Hours worked by day">
+              <defs>
+                <linearGradient id="hoursGradient" x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="0%" stop-color="var(--kinetic-chart-start)" stop-opacity="0.6"></stop>
+                  <stop offset="100%" stop-color="var(--kinetic-chart-end)" stop-opacity="0.08"></stop>
+                </linearGradient>
+              </defs>
+              <path d="{{ chart_data.area_path }}" fill="url(#hoursGradient)"></path>
+              <path d="{{ chart_data.path }}" fill="none" stroke="var(--kinetic-chart-stroke)" stroke-width="3"></path>
+              {% for point in chart_data.points %}
+                <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4.5" fill="var(--kinetic-chart-point)"></circle>
+              {% endfor %}
+            </svg>
+            <div class="tracking-chart-labels">
+              {% for point in chart_data.points %}
+                <div class="tracking-chart-label">
+                  <div class="text-muted small">{{ point.work_date }}</div>
+                  <div class="fw-semibold small">{{ point.hours_worked }}h</div>
+                </div>
+              {% endfor %}
+            </div>
           </div>
-        </div>
-      {% endif %}
-    </div>
+        {% endif %}
+      </div>
+    {% endif %}
 
     <div class="row g-4">
       <div class="col-lg-5">
@@ -110,29 +131,51 @@
             <h3 class="h6 fw-semibold mb-0">Updates</h3>
             <span class="text-muted small">{{ updates | length }} entries</span>
           </div>
+          {% if is_admin_viewer and missing_user_ids > 0 %}
+            <div class="alert alert-warning py-2 px-3 small mx-2 mb-3">
+              {{ missing_user_ids }} legacy update(s) are not linked to a user yet, so employees will not see them.
+            </div>
+          {% endif %}
           <div class="table-responsive">
             <table class="table align-middle mb-0">
               <thead>
                 <tr>
+                  <th>Reported by</th>
                   <th>Date</th>
                   <th>Start</th>
                   <th>Finish</th>
                   <th>Hours</th>
                   <th>Update</th>
+                  {% if can_edit_updates %}
+                    <th>Actions</th>
+                  {% endif %}
                 </tr>
               </thead>
               <tbody>
                 {% for update in updates %}
                   <tr>
+                    <td>{{ update.user_email | default(value="Unknown") }}</td>
                     <td>{{ update.work_date }}</td>
                     <td>{{ update.start_time }}</td>
                     <td>{{ update.end_time }}</td>
                     <td>{{ update.hours_worked }}</td>
                     <td>{{ update.notes }}</td>
+                    {% if is_owner or (update.is_placeholder and update.user_id == current_user_id) %}
+                      <td>
+                        <div class="d-flex gap-2">
+                          <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/tracking/updates/{{ update.id }}/edit">Edit</a>
+                          {% if is_owner %}
+                            <form method="post" action="/{{ current_user.tenant_slug }}/tracking/updates/{{ update.id }}/delete">
+                              <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                            </form>
+                          {% endif %}
+                        </div>
+                      </td>
+                    {% endif %}
                   </tr>
                 {% else %}
                   <tr>
-                    <td colspan="5" class="text-center text-muted py-4">No updates yet.</td>
+                    <td colspan="{% if can_edit_updates %}7{% else %}6{% endif %}" class="text-center text-muted py-4">No updates yet.</td>
                   </tr>
                 {% endfor %}
               </tbody>

@@ -33,6 +33,7 @@ pub async fn list_invoices_with_details(
         LEFT JOIN deployment_updates
             ON deployment_updates.deployment_id = deployments.id
             AND deployment_updates.tenant_id = invoices.tenant_id
+            AND deployment_updates.is_placeholder = 0
         WHERE invoices.tenant_id = ?
         GROUP BY invoices.id
         ORDER BY invoices.created_at DESC, invoices.id DESC
@@ -96,6 +97,7 @@ pub async fn find_invoice_with_details(
         LEFT JOIN deployment_updates
             ON deployment_updates.deployment_id = deployments.id
             AND deployment_updates.tenant_id = invoices.tenant_id
+            AND deployment_updates.is_placeholder = 0
         WHERE invoices.tenant_id = ? AND invoices.id = ?
         GROUP BY invoices.id
         LIMIT 1
@@ -246,6 +248,7 @@ pub async fn list_completed_deployments_without_invoice(
         LEFT JOIN deployment_updates
             ON deployment_updates.deployment_id = deployments.id
             AND deployment_updates.tenant_id = deployments.tenant_id
+            AND deployment_updates.is_placeholder = 0
         WHERE deployments.tenant_id = ?
             AND deployments.status = 'Completed'
             AND invoices.id IS NULL

@@ -367,6 +367,14 @@ pub async fn find_deployment_by_id(
     deployment_repo::find_deployment_by_id(db, tenant_id, deployment_id).await
 }
 
+pub async fn find_deployment_label(
+    db: &Db,
+    tenant_id: i64,
+    deployment_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    deployment_repo::find_deployment_label(db, tenant_id, deployment_id).await
+}
+
 pub async fn delete_deployment(
     db: &Db,
     tenant_id: i64,

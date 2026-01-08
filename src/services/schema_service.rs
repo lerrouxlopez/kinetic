@@ -199,15 +199,18 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,
             deployment_id INTEGER NOT NULL,
+            user_id INTEGER,
             work_date TEXT NOT NULL,
             start_time TEXT NOT NULL,
             end_time TEXT NOT NULL,
             hours_worked REAL NOT NULL DEFAULT 0,
             notes TEXT NOT NULL,
+            is_placeholder INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            UNIQUE(deployment_id, work_date),
+            UNIQUE(deployment_id, work_date, user_id),
             FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
-            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
         )
         "#,
     )
@@ -442,6 +445,34 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             .execute(&db.0)
             .await,
     );
+    ensure_deployment_updates_user_id(db).await?;
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE deployment_updates ADD COLUMN is_placeholder INTEGER NOT NULL DEFAULT 0",
+        )
+        .execute(&db.0)
+        .await,
+    );
+    ensure_deployment_updates_unique_per_user(db).await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS work_timers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            deployment_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            start_at TEXT NOT NULL,
+            end_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(deployment_id) REFERENCES deployments(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
 
     sqlx::query(
         "UPDATE tenants SET plan_started_at = datetime('now') WHERE plan_started_at = '1970-01-01 00:00:00' OR plan_started_at = ''",
@@ -500,6 +531,107 @@ fn ignore_duplicate_column(result: Result<sqlx::sqlite::SqliteQueryResult, sqlx:
             eprintln!("Schema update error: {message}");
         }
     }
+}
+
+async fn ensure_deployment_updates_user_id(db: &Db) -> Result<(), sqlx::Error> {
+    let columns = sqlx::query("PRAGMA table_info(deployment_updates)")
+        .fetch_all(&db.0)
+        .await?;
+    let has_user_id = columns
+        .iter()
+        .any(|row| row.get::<String, _>("name") == "user_id");
+    if !has_user_id {
+        sqlx::query("ALTER TABLE deployment_updates ADD COLUMN user_id INTEGER")
+            .execute(&db.0)
+            .await?;
+        sqlx::query(
+            r#"
+            UPDATE deployment_updates
+            SET user_id = (
+                SELECT cm.user_id
+                FROM deployments d
+                JOIN crew_members cm ON cm.crew_id = d.crew_id
+                WHERE d.id = deployment_updates.deployment_id
+                  AND cm.user_id IS NOT NULL
+                ORDER BY cm.id
+                LIMIT 1
+            )
+            WHERE user_id IS NULL
+            "#,
+        )
+        .execute(&db.0)
+        .await?;
+    }
+    Ok(())
+}
+
+async fn ensure_deployment_updates_unique_per_user(db: &Db) -> Result<(), sqlx::Error> {
+    let index_rows = sqlx::query("PRAGMA index_list('deployment_updates')")
+        .fetch_all(&db.0)
+        .await?;
+    let mut needs_rebuild = false;
+    for row in index_rows {
+        let is_unique = row.get::<i64, _>("unique") != 0;
+        if !is_unique {
+            continue;
+        }
+        let index_name: String = row.get("name");
+        let columns = sqlx::query(&format!("PRAGMA index_info('{index_name}')"))
+            .fetch_all(&db.0)
+            .await?;
+        let names = columns
+            .into_iter()
+            .map(|col| col.get::<String, _>("name"))
+            .collect::<Vec<_>>();
+        if names == vec!["deployment_id", "work_date"] {
+            needs_rebuild = true;
+            break;
+        }
+    }
+    if !needs_rebuild {
+        return Ok(());
+    }
+
+    sqlx::query("ALTER TABLE deployment_updates RENAME TO deployment_updates_old")
+        .execute(&db.0)
+        .await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE deployment_updates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            deployment_id INTEGER NOT NULL,
+            user_id INTEGER,
+            work_date TEXT NOT NULL,
+            start_time TEXT NOT NULL,
+            end_time TEXT NOT NULL,
+            hours_worked REAL NOT NULL DEFAULT 0,
+            notes TEXT NOT NULL,
+            is_placeholder INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(deployment_id, work_date, user_id),
+            FOREIGN KEY(deployment_id) REFERENCES deployments(id) ON DELETE CASCADE,
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id),
+            FOREIGN KEY(user_id) REFERENCES users(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+    sqlx::query(
+        r#"
+        INSERT INTO deployment_updates
+            (id, tenant_id, deployment_id, user_id, work_date, start_time, end_time, hours_worked, notes, is_placeholder, created_at)
+        SELECT id, tenant_id, deployment_id, user_id, work_date, start_time, end_time, hours_worked, notes, is_placeholder, created_at
+        FROM deployment_updates_old
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+    sqlx::query("DROP TABLE deployment_updates_old")
+        .execute(&db.0)
+        .await?;
+    Ok(())
 }
 
 async fn seed_admin(db: &Db) -> Result<(), sqlx::Error> {

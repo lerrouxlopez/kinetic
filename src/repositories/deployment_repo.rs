@@ -187,6 +187,32 @@ pub async fn find_deployment_by_id(
     }))
 }
 
+pub async fn find_deployment_label(
+    db: &Db,
+    tenant_id: i64,
+    deployment_id: i64,
+) -> Result<Option<String>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT clients.company_name as client_name, crews.name as crew_name
+        FROM deployments
+        JOIN clients ON deployments.client_id = clients.id
+        JOIN crews ON deployments.crew_id = crews.id
+        WHERE deployments.tenant_id = ? AND deployments.id = ?
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(deployment_id)
+    .fetch_optional(&db.0)
+    .await?;
+
+    Ok(row.map(|row| {
+        let client_name: String = row.get("client_name");
+        let crew_name: String = row.get("crew_name");
+        format!("{client_name} - {crew_name}")
+    }))
+}
+
 pub async fn update_deployment(
     db: &Db,
     tenant_id: i64,

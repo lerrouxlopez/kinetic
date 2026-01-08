@@ -9,6 +9,7 @@ use crate::models::{
     DeploymentFormView,
     DeploymentUpdateForm,
     DeploymentUpdateFormView,
+    WorkTimerForm,
     LoginForm,
     LoginView,
     RegisterForm,
@@ -308,6 +309,19 @@ pub async fn dashboard(
     let is_employee = access_service::is_employee(&user.role);
     let is_operations = access_service::is_operations(&user.role);
     let is_admin_workspace = user.tenant_slug == "admin" || user.is_super_admin;
+    let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
+        .await
+        .ok()
+        .flatten();
+    let active_timer_label = match active_timer.as_ref() {
+        Some(timer) => {
+            deployment_service::find_deployment_label(db, user.tenant_id, timer.deployment_id)
+                .await
+                .ok()
+                .flatten()
+        }
+        None => None,
+    };
     let clients_total = if can_view_clients {
         if is_admin_workspace {
             client_service::count_clients_all(db).await.unwrap_or(0)
@@ -598,6 +612,7 @@ pub async fn dashboard(
         context! {
             title: "Dashboard",
             current_user: Some(CurrentUserView::from(&user)),
+            current_user_id: user.id,
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             tenant_slug: user.tenant_slug,
             email: user.email,
@@ -629,6 +644,8 @@ pub async fn dashboard(
             invoice_sent_total: invoice_sent_total,
             invoice_paid_total: invoice_paid_total,
             tracking_reports_total: tracking_reports_total,
+            active_timer: active_timer,
+            active_timer_label: active_timer_label,
         },
     ))
 }
@@ -678,6 +695,7 @@ pub async fn tracking(
     if !access_service::can_view(db, &user, "tracking").await {
         return Err(Redirect::to(uri!(dashboard(slug = user.tenant_slug))));
     }
+    let _ = tracking_service::close_stale_timers(db, user.tenant_id).await;
     let deployments = if access_service::is_employee(&user.role) {
         let crew_ids =
             crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
@@ -692,28 +710,82 @@ pub async fn tracking(
             .unwrap_or_default()
     };
     let allowed_ids = deployments.iter().map(|item| item.id).collect::<Vec<_>>();
+    let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
+        .await
+        .ok()
+        .flatten();
     let selected_deployment = deployment_id
         .filter(|id| allowed_ids.contains(id))
+        .or_else(|| {
+            active_timer
+                .as_ref()
+                .map(|timer| timer.deployment_id)
+                .filter(|id| allowed_ids.contains(id))
+        })
         .or_else(|| deployments.first().map(|item| item.id))
         .filter(|id| *id > 0);
+    let is_admin_viewer =
+        access_service::is_owner(&user.role) || access_service::is_admin(&user.role);
+    let is_owner = access_service::is_owner(&user.role);
     let updates = match selected_deployment {
+        Some(deployment_id) if access_service::is_employee(&user.role) => {
+            tracking_service::list_updates_for_user(
+                db,
+                user.tenant_id,
+                deployment_id,
+                user.id,
+            )
+            .await
+            .unwrap_or_default()
+        }
         Some(deployment_id) => tracking_service::list_updates(db, user.tenant_id, deployment_id)
             .await
             .unwrap_or_default(),
         None => Vec::new(),
     };
-    let chart_data = build_hours_chart(&updates);
+    let missing_user_ids = if is_admin_viewer {
+        if let Some(deployment_id) = selected_deployment {
+            tracking_service::count_updates_missing_user_id(
+                db,
+                user.tenant_id,
+                deployment_id,
+            )
+            .await
+            .unwrap_or(0)
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    let chart_updates = updates
+        .iter()
+        .filter(|update| !update.is_placeholder)
+        .cloned()
+        .collect::<Vec<_>>();
+    let chart_data = build_hours_chart(&chart_updates);
+    let can_edit_updates = is_owner
+        || updates
+            .iter()
+            .any(|update| update.is_placeholder && update.user_id == Some(user.id));
     Ok(Template::render(
         "tracking/index",
         context! {
             title: "Tracking",
             current_user: Some(CurrentUserView::from(&user)),
+            current_user_id: user.id,
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             deployments: deployments,
             selected_deployment: selected_deployment,
             updates: updates,
             chart_data: chart_data,
             error: Option::<String>::None,
+            is_employee: access_service::is_employee(&user.role),
+            is_admin_viewer: is_admin_viewer,
+            missing_user_ids: missing_user_ids,
+            is_owner: is_owner,
+            can_edit_updates: can_edit_updates,
+            active_timer: active_timer,
             form: DeploymentUpdateFormView::new(
                 selected_deployment.unwrap_or(0),
                 "",
@@ -766,17 +838,28 @@ pub async fn tracking_update_create(
         let allowed_ids = deployments.iter().map(|item| item.id).collect::<Vec<_>>();
         if let Some(deployment_id) = selected_deployment {
             if !allowed_ids.contains(&deployment_id) {
+                let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
+                    .await
+                    .ok()
+                    .flatten();
                 return Err(Template::render(
                     "tracking/index",
                     context! {
                         title: "Tracking",
                         current_user: Some(CurrentUserView::from(&user)),
+                        current_user_id: user.id,
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                         deployments: deployments,
                         selected_deployment: Option::<i64>::None,
                         updates: Vec::<crate::models::DeploymentUpdate>::new(),
                         chart_data: build_hours_chart(&[]),
                         error: "You do not have access to that deployment.".to_string(),
+                        is_employee: access_service::is_employee(&user.role),
+                        is_admin_viewer: access_service::is_owner(&user.role) || access_service::is_admin(&user.role),
+                        missing_user_ids: 0,
+                        is_owner: access_service::is_owner(&user.role),
+                        can_edit_updates: access_service::is_owner(&user.role),
+                        active_timer: active_timer,
                         form: DeploymentUpdateFormView::new(
                             0,
                             "",
@@ -790,37 +873,477 @@ pub async fn tracking_update_create(
         }
     }
 
-    match tracking_service::create_update(db, user.tenant_id, form).await {
+    match tracking_service::create_update(db, user.tenant_id, user.id, form).await {
         Ok(_) => Ok(Redirect::to(uri!(tracking(
             slug = user.tenant_slug,
             deployment_id = selected_deployment
         )))),
         Err(err) => {
             let deployment_id = selected_deployment.unwrap_or(0);
+            let is_admin_viewer =
+                access_service::is_owner(&user.role) || access_service::is_admin(&user.role);
+            let is_owner = access_service::is_owner(&user.role);
+            let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
+                .await
+                .ok()
+                .flatten();
             let updates = if deployment_id > 0 {
-                tracking_service::list_updates(db, user.tenant_id, deployment_id)
+                if access_service::is_employee(&user.role) {
+                    tracking_service::list_updates_for_user(
+                        db,
+                        user.tenant_id,
+                        deployment_id,
+                        user.id,
+                    )
                     .await
                     .unwrap_or_default()
+                } else {
+                    tracking_service::list_updates(db, user.tenant_id, deployment_id)
+                        .await
+                        .unwrap_or_default()
+                }
             } else {
                 Vec::new()
             };
-            let chart_data = build_hours_chart(&updates);
+            let missing_user_ids = if is_admin_viewer && deployment_id > 0 {
+                tracking_service::count_updates_missing_user_id(
+                    db,
+                    user.tenant_id,
+                    deployment_id,
+                )
+                .await
+                .unwrap_or(0)
+            } else {
+                0
+            };
+            let chart_updates = updates
+                .iter()
+                .filter(|update| !update.is_placeholder)
+                .cloned()
+                .collect::<Vec<_>>();
+            let chart_data = build_hours_chart(&chart_updates);
+            let can_edit_updates = is_owner
+                || updates
+                    .iter()
+                    .any(|update| update.is_placeholder && update.user_id == Some(user.id));
             Err(Template::render(
                 "tracking/index",
                 context! {
                     title: "Tracking",
                     current_user: Some(CurrentUserView::from(&user)),
+                    current_user_id: user.id,
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     deployments: deployments,
                     selected_deployment: selected_deployment,
                     updates: updates,
                     chart_data: chart_data,
                     error: err.message,
+                    is_employee: access_service::is_employee(&user.role),
+                    is_admin_viewer: is_admin_viewer,
+                    missing_user_ids: missing_user_ids,
+                    is_owner: is_owner,
+                    can_edit_updates: can_edit_updates,
+                    active_timer: active_timer,
                     form: err.form,
                 },
             ))
         }
     }
+}
+
+#[post("/<slug>/tracking/start", data = "<form>")]
+pub async fn tracking_timer_start(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    form: Form<WorkTimerForm>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let deployments = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+                .await
+                .unwrap_or_default();
+        deployment_service::list_deployments_for_select_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_for_select(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
+    let selected_deployment = if form.deployment_id > 0 {
+        Some(form.deployment_id)
+    } else {
+        None
+    };
+
+    if access_service::is_employee(&user.role) {
+        let allowed_ids = deployments.iter().map(|item| item.id).collect::<Vec<_>>();
+        if let Some(deployment_id) = selected_deployment {
+            if !allowed_ids.contains(&deployment_id) {
+                return Err(render_tracking_error(
+                    db,
+                    &user,
+                    deployments,
+                    None,
+                    "You do not have access to that deployment.",
+                )
+                .await);
+            }
+        }
+    }
+
+    let error_message = if form.deployment_id <= 0 {
+        Some("Select a deployment before starting work.".to_string())
+    } else {
+        None
+    };
+    let start_result = if error_message.is_none() {
+        tracking_service::start_timer(db, user.tenant_id, form.deployment_id, user.id).await
+    } else {
+        Err(error_message.unwrap())
+    };
+
+    match start_result {
+        Ok(_) => Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = selected_deployment
+        )))),
+        Err(message) => Err(
+            render_tracking_error(db, &user, deployments, selected_deployment, &message).await,
+        ),
+    }
+}
+
+#[post("/<slug>/tracking/stop", data = "<form>")]
+pub async fn tracking_timer_stop(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    form: Form<WorkTimerForm>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let deployments = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+                .await
+                .unwrap_or_default();
+        deployment_service::list_deployments_for_select_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_for_select(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
+    let selected_deployment = if form.deployment_id > 0 {
+        Some(form.deployment_id)
+    } else {
+        None
+    };
+
+    let stop_result = tracking_service::stop_timer(
+        db,
+        user.tenant_id,
+        form.deployment_id,
+        user.id,
+    )
+    .await;
+    match stop_result {
+        Ok(_) => Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = selected_deployment
+        )))),
+        Err(message) => Err(
+            render_tracking_error(db, &user, deployments, selected_deployment, &message).await,
+        ),
+    }
+}
+
+#[get("/<slug>/tracking/updates/<id>/edit")]
+pub async fn tracking_update_edit_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+) -> Result<Template, Redirect> {
+    let user = workspace_user(cookies, db, slug).await?;
+    let update = match tracking_service::find_update_by_id(db, user.tenant_id, id).await {
+        Ok(Some(update)) => update,
+        _ => {
+            return Err(Redirect::to(uri!(tracking(
+                slug = user.tenant_slug,
+                deployment_id = Option::<i64>::None
+            ))))
+        }
+    };
+    let is_owner = access_service::is_owner(&user.role);
+    let can_edit_placeholder =
+        update.is_placeholder && update.user_id == Some(user.id);
+    if !is_owner && !can_edit_placeholder {
+        return Err(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+
+    Ok(Template::render(
+        "tracking/edit",
+        context! {
+            title: "Edit update",
+            current_user: Some(CurrentUserView::from(&user)),
+            current_user_id: user.id,
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            error: Option::<String>::None,
+            update_id: update.id,
+            deployment_id: update.deployment_id,
+            can_edit_times: is_owner,
+            form: DeploymentUpdateFormView::new(
+                update.deployment_id,
+                update.work_date,
+                update.start_time,
+                update.end_time,
+                update.notes,
+            ),
+        },
+    ))
+}
+
+#[post("/<slug>/tracking/updates/<id>", data = "<form>")]
+pub async fn tracking_update_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    form: Form<DeploymentUpdateForm>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    let existing = match tracking_service::find_update_by_id(db, user.tenant_id, id).await {
+        Ok(Some(update)) => update,
+        _ => {
+            return Ok(Redirect::to(uri!(tracking(
+                slug = user.tenant_slug,
+                deployment_id = Option::<i64>::None
+            ))))
+        }
+    };
+    let is_owner = access_service::is_owner(&user.role);
+    let can_edit_placeholder =
+        existing.is_placeholder && existing.user_id == Some(user.id);
+    if !is_owner && !can_edit_placeholder {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let mut form = form.into_inner();
+    if !is_owner {
+        form.work_date = existing.work_date.clone();
+        form.start_time = existing.start_time.clone();
+        form.end_time = existing.end_time.clone();
+    }
+    match tracking_service::update_update(db, user.tenant_id, id, form).await {
+        Ok(deployment_id) => Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Some(deployment_id)
+        )))),
+        Err(err) => Err(Template::render(
+            "tracking/edit",
+            context! {
+                title: "Edit update",
+                current_user: Some(CurrentUserView::from(&user)),
+                current_user_id: user.id,
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                error: err.message,
+                update_id: id,
+                deployment_id: err.form.deployment_id,
+                can_edit_times: is_owner,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[post("/<slug>/tracking/updates/<id>/delete")]
+pub async fn tracking_update_delete(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::is_owner(&user.role) {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    match tracking_service::delete_update(db, user.tenant_id, id).await {
+        Ok(deployment_id) => Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Some(deployment_id)
+        )))),
+        Err(message) => {
+            let deployments = deployment_service::list_deployments_for_select(db, user.tenant_id)
+                .await
+                .unwrap_or_default();
+            let selected_deployment = deployments.first().map(|item| item.id);
+            let updates = match selected_deployment {
+                Some(deployment_id) => tracking_service::list_updates(
+                    db,
+                    user.tenant_id,
+                    deployment_id,
+                )
+                .await
+                .unwrap_or_default(),
+                None => Vec::new(),
+            };
+            let chart_updates = updates
+                .iter()
+                .filter(|update| !update.is_placeholder)
+                .cloned()
+                .collect::<Vec<_>>();
+            let chart_data = build_hours_chart(&chart_updates);
+            let can_edit_updates = true;
+            let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
+                .await
+                .ok()
+                .flatten();
+            Err(Template::render(
+                "tracking/index",
+                context! {
+                    title: "Tracking",
+                    current_user: Some(CurrentUserView::from(&user)),
+                    current_user_id: user.id,
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    deployments: deployments,
+                    selected_deployment: selected_deployment,
+                    updates: updates,
+                    chart_data: chart_data,
+                    error: message,
+                    is_employee: access_service::is_employee(&user.role),
+                    is_admin_viewer: true,
+                    missing_user_ids: 0,
+                    is_owner: true,
+                    can_edit_updates: can_edit_updates,
+                    active_timer: active_timer,
+                    form: DeploymentUpdateFormView::new(
+                        selected_deployment.unwrap_or(0),
+                        "",
+                        "",
+                        "",
+                        "",
+                    ),
+                },
+            ))
+        }
+    }
+}
+
+async fn render_tracking_error(
+    db: &Db,
+    user: &crate::models::User,
+    deployments: Vec<crate::models::DeploymentSelect>,
+    selected_deployment: Option<i64>,
+    message: &str,
+) -> Template {
+    let updates = match selected_deployment {
+        Some(deployment_id) if access_service::is_employee(&user.role) => {
+            tracking_service::list_updates_for_user(db, user.tenant_id, deployment_id, user.id)
+                .await
+                .unwrap_or_default()
+        }
+        Some(deployment_id) => tracking_service::list_updates(db, user.tenant_id, deployment_id)
+            .await
+            .unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let chart_updates = updates
+        .iter()
+        .filter(|update| !update.is_placeholder)
+        .cloned()
+        .collect::<Vec<_>>();
+    let chart_data = build_hours_chart(&chart_updates);
+    let is_admin_viewer =
+        access_service::is_owner(&user.role) || access_service::is_admin(&user.role);
+    let is_owner = access_service::is_owner(&user.role);
+    let missing_user_ids = if is_admin_viewer {
+        if let Some(deployment_id) = selected_deployment {
+            tracking_service::count_updates_missing_user_id(
+                db,
+                user.tenant_id,
+                deployment_id,
+            )
+            .await
+            .unwrap_or(0)
+        } else {
+            0
+        }
+    } else {
+        0
+    };
+    let can_edit_updates = is_owner
+        || updates
+            .iter()
+            .any(|update| update.is_placeholder && update.user_id == Some(user.id));
+    let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
+        .await
+        .ok()
+        .flatten();
+    Template::render(
+        "tracking/index",
+        context! {
+            title: "Tracking",
+            current_user: Some(CurrentUserView::from(user)),
+            current_user_id: user.id,
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            deployments: deployments,
+            selected_deployment: selected_deployment,
+            updates: updates,
+            chart_data: chart_data,
+            error: message.to_string(),
+            is_employee: access_service::is_employee(&user.role),
+            is_admin_viewer: is_admin_viewer,
+            missing_user_ids: missing_user_ids,
+            is_owner: is_owner,
+            can_edit_updates: can_edit_updates,
+            active_timer: active_timer,
+            form: DeploymentUpdateFormView::new(
+                selected_deployment.unwrap_or(0),
+                "",
+                "",
+                "",
+                "",
+            ),
+        },
+    )
 }
 
 fn build_hours_chart(updates: &[crate::models::DeploymentUpdate]) -> serde_json::Value {
@@ -1452,6 +1975,7 @@ pub async fn deployments(
         context! {
             title: "Deployments",
             current_user: Some(CurrentUserView::from(&user)),
+            current_user_id: user.id,
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             deployments: deployments,
             deployment_limit: deployment_limit.unwrap_or(0),
@@ -1480,8 +2004,9 @@ pub async fn deployment_new_form(
         "deployments/new",
         context! {
             title: "New deployment",
-            current_user: Some(CurrentUserView::from(&user)),
-            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                current_user: Some(CurrentUserView::from(&user)),
+                current_user_id: user.id,
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             form: DeploymentFormView::new(0, 0, "", "", 0.0, "", "Scheduled"),
             clients: clients,
@@ -1519,8 +2044,9 @@ pub async fn deployment_create(
             "deployments/new",
             context! {
                 title: "New deployment",
-                current_user: Some(CurrentUserView::from(&user)),
-            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    current_user: Some(CurrentUserView::from(&user)),
+                    current_user_id: user.id,
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 form: err.form,
                 clients: clients,
@@ -1569,6 +2095,7 @@ pub async fn deployment_edit_form(
         context! {
             title: "Edit deployment",
             current_user: Some(CurrentUserView::from(&user)),
+            current_user_id: user.id,
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             deployment_id: deployment.id,
@@ -1618,7 +2145,8 @@ pub async fn deployment_update(
             context! {
                 title: "Edit deployment",
                 current_user: Some(CurrentUserView::from(&user)),
-            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                current_user_id: user.id,
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
                 error: err.message,
                 deployment_id: id,
                 form: err.form,

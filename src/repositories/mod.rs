@@ -5,6 +5,7 @@ pub mod crew_member_repo;
 pub mod appointment_repo;
 pub mod deployment_repo;
 pub mod deployment_update_repo;
+pub mod work_timer_repo;
 pub mod email_repo;
 pub mod invoice_repo;
 pub mod tenant_repo;
