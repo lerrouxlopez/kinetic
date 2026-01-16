@@ -118,40 +118,105 @@
     {% endif %}
 
     <div class="row g-4">
-      <div class="col-lg-5">
-        <div class="card glass-card p-4">
-          <h3 class="h6 fw-semibold mb-3">Add daily update</h3>
-          <form method="post" action="/{{ current_user.tenant_slug }}/tracking">
-            <input type="hidden" name="deployment_id" value="{{ selected_deployment | default(value=0) }}">
-            <div class="mb-3">
-              <label class="form-label">Work date</label>
-              <input class="form-control" type="date" name="work_date" value="{{ form.work_date }}" required>
-            </div>
-            <div class="row g-3">
-              <div class="col-md-6">
-                <label class="form-label">Start time</label>
-                <input class="form-control" type="time" name="start_time" value="{{ form.start_time }}" required>
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Finish time</label>
-                <input class="form-control" type="time" name="end_time" value="{{ form.end_time }}" required>
-              </div>
-            </div>
-            <div class="mb-3 mt-3">
-              <label class="form-label">Update</label>
-              <textarea class="form-control" name="notes" rows="4" required>{{ form.notes }}</textarea>
-            </div>
-            <button class="btn btn-primary w-100" type="submit" {% if selected_deployment is not defined or selected_deployment == 0 %}disabled{% endif %}>
-              Save update
-            </button>
-          </form>
-        </div>
-      </div>
-      <div class="col-lg-7">
+      <div class="col-lg-6">
         <div class="card glass-card p-3">
           <div class="d-flex align-items-center justify-content-between mb-3 px-2">
-            <h3 class="h6 fw-semibold mb-0">Updates</h3>
-            <span class="text-muted small">{{ updates | length }} entries</span>
+            <h3 class="h6 fw-semibold mb-0">Discussions</h3>
+            {% if selected_deployment is defined and selected_deployment > 0 and can_edit_tracking %}
+              <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment }}/discussions/new">Add discussion</a>
+            {% else %}
+              <button class="btn btn-sm btn-outline-primary" type="button" disabled>Add discussion</button>
+            {% endif %}
+          </div>
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Message</th>
+                  <th>Tags</th>
+                  <th>From</th>
+                  <th>Added</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% if selected_deployment is not defined or selected_deployment == 0 %}
+                  <tr>
+                    <td colspan="5" class="text-center text-muted py-4">Select a deployment to view discussions.</td>
+                  </tr>
+                {% else %}
+                  {% for discussion in discussions %}
+                    <tr>
+                      <td>{{ discussion.message }}</td>
+                      <td class="text-muted">{{ discussion.tagged_user_email | default(value="--") }}</td>
+                      <td>{{ discussion.author_email }}</td>
+                      <td class="text-muted">{{ discussion.created_at }}</td>
+                      <td class="text-end">
+                        {% if can_edit_tracking %}
+                          <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment }}/discussions/{{ discussion.id }}/edit" title="Edit" aria-label="Edit">
+                            <i class="bi bi-pencil"></i>
+                            <span class="visually-hidden">Edit</span>
+                          </a>
+                        {% endif %}
+                        {% if can_delete_tracking %}
+                          <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment }}/discussions/{{ discussion.id }}/delete" onsubmit="return confirm('Delete this discussion?');">
+                            <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                              <i class="bi bi-trash"></i>
+                              <span class="visually-hidden">Delete</span>
+                            </button>
+                          </form>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% else %}
+                    <tr>
+                      <td colspan="5" class="text-center text-muted py-4">No discussions yet.</td>
+                    </tr>
+                  {% endfor %}
+                {% endif %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="col-lg-6">
+        <div class="card glass-card p-3">
+          <div class="d-flex align-items-center justify-content-between mb-3 px-2">
+            <div>
+              <h3 class="h6 fw-semibold mb-0">Updates</h3>
+              <div class="text-muted small">{{ updates | length }} entries</div>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#daily-update-form" aria-expanded="false" aria-controls="daily-update-form" {% if selected_deployment is not defined or selected_deployment == 0 or not can_edit_tracking %}disabled{% endif %}>
+              Add Daily Update
+            </button>
+          </div>
+          <div class="collapse mb-3" id="daily-update-form" data-show-update="{% if error %}true{% else %}false{% endif %}">
+            <div class="card border-0 bg-transparent">
+              <form method="post" action="/{{ current_user.tenant_slug }}/tracking">
+                <input type="hidden" name="deployment_id" value="{{ selected_deployment | default(value=0) }}">
+                <div class="mb-3">
+                  <label class="form-label">Work date</label>
+                  <input class="form-control" type="date" name="work_date" value="{{ form.work_date }}" required>
+                </div>
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Start time</label>
+                    <input class="form-control" type="time" name="start_time" value="{{ form.start_time }}" required>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Finish time</label>
+                    <input class="form-control" type="time" name="end_time" value="{{ form.end_time }}" required>
+                  </div>
+                </div>
+                <div class="mb-3 mt-3">
+                  <label class="form-label">Update</label>
+                  <textarea class="form-control" name="notes" rows="4" required>{{ form.notes }}</textarea>
+                </div>
+                <button class="btn btn-primary w-100" type="submit" {% if selected_deployment is not defined or selected_deployment == 0 %}disabled{% endif %}>
+                  Save update
+                </button>
+              </form>
+            </div>
           </div>
           {% if is_admin_viewer and missing_user_ids > 0 %}
             <div class="alert alert-warning py-2 px-3 small mx-2 mb-3">
@@ -263,6 +328,22 @@
         }
         setTimeout(() => map.invalidateSize(), 0);
       }
+    </script>
+    <script>
+      (function () {
+        if (typeof bootstrap === "undefined") {
+          return;
+        }
+        var wrapper = document.getElementById("daily-update-form");
+        if (!wrapper) {
+          return;
+        }
+        if (wrapper.dataset.showUpdate !== "true") {
+          return;
+        }
+        var collapse = new bootstrap.Collapse(wrapper, { toggle: false });
+        collapse.show();
+      })();
     </script>
   </div>
 {% endblock content %}

@@ -605,6 +605,46 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         r#"
+        CREATE TABLE IF NOT EXISTS deployment_discussions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            deployment_id INTEGER NOT NULL,
+            author_id INTEGER NOT NULL,
+            tagged_user_id INTEGER,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(deployment_id) REFERENCES deployments(id),
+            FOREIGN KEY(author_id) REFERENCES users(id),
+            FOREIGN KEY(tagged_user_id) REFERENCES users(id),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS crew_discussions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            crew_id INTEGER NOT NULL,
+            author_id INTEGER NOT NULL,
+            tagged_user_id INTEGER,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(crew_id) REFERENCES crews(id),
+            FOREIGN KEY(author_id) REFERENCES users(id),
+            FOREIGN KEY(tagged_user_id) REFERENCES users(id),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
+    sqlx::query(
+        r#"
         CREATE TABLE IF NOT EXISTS client_discussions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             tenant_id INTEGER NOT NULL,

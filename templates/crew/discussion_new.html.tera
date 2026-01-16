@@ -1,0 +1,39 @@
+{% extends "layout" %}
+
+{% block content %}
+  <div class="page-wide">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+      <div>
+        <h2 class="h4 fw-bold mb-1">New discussion</h2>
+        <p class="text-muted mb-0">Capture a discussion for {{ crew.name }}.</p>
+      </div>
+      <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/profile">Back</a>
+    </div>
+
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <div class="card glass-card p-4">
+          {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+          {% endif %}
+          <form method="post" action="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/discussions">
+            <div class="mb-3">
+              <label class="form-label">Message</label>
+              <textarea class="form-control" name="message" rows="5" required>{{ form.message }}</textarea>
+            </div>
+            <div class="mb-4">
+              <label class="form-label">Tag a user</label>
+              <select class="form-select" name="tagged_user_id">
+                <option value="">No tag</option>
+                {% for user in users %}
+                  <option value="{{ user.id }}" {% if form.tagged_user_id == user.id %}selected{% endif %}>{{ user.email }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">Add discussion</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock content %}

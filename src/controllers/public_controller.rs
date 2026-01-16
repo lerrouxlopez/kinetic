@@ -9,6 +9,8 @@ use crate::models::{
     DeploymentFormView,
     DeploymentUpdateForm,
     DeploymentUpdateFormView,
+    DiscussionForm,
+    DiscussionFormView,
     WorkTimerForm,
     LoginForm,
     LoginView,
@@ -36,6 +38,7 @@ use crate::services::{
     appointment_service,
     client_service,
     crew_service,
+    deployment_discussion_service,
     deployment_service,
     invoice_service,
     email_service,
@@ -1124,6 +1127,20 @@ pub async fn tracking(
     let coverage_map = build_live_coverage_map(db, &user).await;
     let coverage_map_json =
         serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
+    let discussions = match selected_deployment {
+        Some(deployment_id) if deployment_id > 0 => {
+            deployment_discussion_service::list_discussions_by_deployment(
+                db,
+                user.tenant_id,
+                deployment_id,
+            )
+            .await
+            .unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
+    let can_edit_tracking = access_service::can_edit(db, &user, "tracking").await;
+    let can_delete_tracking = access_service::can_delete(db, &user, "tracking").await;
     let can_edit_updates = is_owner
         || updates
             .iter()
@@ -1147,6 +1164,9 @@ pub async fn tracking(
             missing_user_ids: missing_user_ids,
             is_owner: is_owner,
             can_edit_updates: can_edit_updates,
+            can_edit_tracking: can_edit_tracking,
+            can_delete_tracking: can_delete_tracking,
+            discussions: discussions,
             active_timer: active_timer,
             form: DeploymentUpdateFormView::new(
                 selected_deployment.unwrap_or(0),
@@ -1213,7 +1233,7 @@ pub async fn tracking_update_create(
                         title: "Tracking",
                         current_user: Some(CurrentUserView::from(&user)),
                         current_user_id: user.id,
-            workspace_brand: workspace_brand(db, user.tenant_id).await,
+                        workspace_brand: workspace_brand(db, user.tenant_id).await,
                         deployments: deployments,
                         selected_deployment: Option::<i64>::None,
                         updates: Vec::<crate::models::DeploymentUpdate>::new(),
@@ -1226,6 +1246,9 @@ pub async fn tracking_update_create(
                         missing_user_ids: 0,
                         is_owner: access_service::is_owner(&user.role),
                         can_edit_updates: access_service::is_owner(&user.role),
+                        can_edit_tracking: access_service::can_edit(db, &user, "tracking").await,
+                        can_delete_tracking: access_service::can_delete(db, &user, "tracking").await,
+                        discussions: Vec::<crate::models::DeploymentDiscussion>::new(),
                         active_timer: active_timer,
                         form: DeploymentUpdateFormView::new(
                             0,
@@ -1292,6 +1315,19 @@ pub async fn tracking_update_create(
             let coverage_map = build_live_coverage_map(db, &user).await;
             let coverage_map_json =
                 serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
+            let discussions = if deployment_id > 0 {
+                deployment_discussion_service::list_discussions_by_deployment(
+                    db,
+                    user.tenant_id,
+                    deployment_id,
+                )
+                .await
+                .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let can_edit_tracking = access_service::can_edit(db, &user, "tracking").await;
+            let can_delete_tracking = access_service::can_delete(db, &user, "tracking").await;
             let can_edit_updates = is_owner
                 || updates
                     .iter()
@@ -1315,6 +1351,9 @@ pub async fn tracking_update_create(
                     missing_user_ids: missing_user_ids,
                     is_owner: is_owner,
                     can_edit_updates: can_edit_updates,
+                    can_edit_tracking: can_edit_tracking,
+                    can_delete_tracking: can_delete_tracking,
+                    discussions: discussions,
                     active_timer: active_timer,
                     form: err.form,
                 },
@@ -1606,7 +1645,20 @@ pub async fn tracking_update_delete(
             let coverage_map = build_live_coverage_map(db, &user).await;
             let coverage_map_json =
                 serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
+            let discussions = if let Some(deployment_id) = selected_deployment {
+                deployment_discussion_service::list_discussions_by_deployment(
+                    db,
+                    user.tenant_id,
+                    deployment_id,
+                )
+                .await
+                .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
             let can_edit_updates = true;
+            let can_edit_tracking = access_service::can_edit(db, &user, "tracking").await;
+            let can_delete_tracking = access_service::can_delete(db, &user, "tracking").await;
             let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
                 .await
                 .ok()
@@ -1630,6 +1682,9 @@ pub async fn tracking_update_delete(
                     missing_user_ids: 0,
                     is_owner: true,
                     can_edit_updates: can_edit_updates,
+                    can_edit_tracking: can_edit_tracking,
+                    can_delete_tracking: can_delete_tracking,
+                    discussions: discussions,
                     active_timer: active_timer,
                     form: DeploymentUpdateFormView::new(
                         selected_deployment.unwrap_or(0),
@@ -1642,6 +1697,317 @@ pub async fn tracking_update_delete(
             ))
         }
     }
+}
+
+#[get("/<slug>/tracking/deployments/<deployment_id>/discussions/new")]
+pub async fn tracking_discussion_new_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    deployment_id: i64,
+) -> Result<Template, Redirect> {
+    let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Err(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let deployment = match deployment_repo::find_deployment_by_id(db, user.tenant_id, deployment_id).await {
+        Ok(Some(deployment)) => deployment,
+        _ => {
+            return Err(Redirect::to(uri!(tracking(
+                slug = user.tenant_slug,
+                deployment_id = Option::<i64>::None
+            ))))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+
+    Ok(Template::render(
+        "tracking/discussion_new",
+        context! {
+            title: "New discussion",
+            current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            deployment: deployment,
+            users: users,
+            error: Option::<String>::None,
+            form: DiscussionFormView::new("", None),
+        },
+    ))
+}
+
+#[post("/<slug>/tracking/deployments/<deployment_id>/discussions", data = "<form>")]
+pub async fn tracking_discussion_create(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    deployment_id: i64,
+    form: Form<DiscussionForm>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let deployments = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+                .await
+                .unwrap_or_default();
+        deployment_service::list_deployments_for_select_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_for_select(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
+    let form = form.into_inner();
+    let deployment = match deployment_repo::find_deployment_by_id(db, user.tenant_id, deployment_id).await {
+        Ok(Some(deployment)) => deployment,
+        _ => {
+            return Err(
+                render_tracking_error(db, &user, deployments, None, "Deployment not found.").await,
+            )
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+
+    match deployment_discussion_service::create_discussion(
+        db,
+        user.tenant_id,
+        deployment_id,
+        user.id,
+        form,
+    )
+    .await
+    {
+        Ok(_) => Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Some(deployment_id)
+        )))),
+        Err(err) => Err(Template::render(
+            "tracking/discussion_new",
+            context! {
+                title: "New discussion",
+                current_user: Some(CurrentUserView::from(&user)),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                deployment: deployment,
+                users: users,
+                error: err.message,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[get("/<slug>/tracking/deployments/<deployment_id>/discussions/<discussion_id>/edit")]
+pub async fn tracking_discussion_edit_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    deployment_id: i64,
+    discussion_id: i64,
+) -> Result<Template, Redirect> {
+    let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Err(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let deployment = match deployment_repo::find_deployment_by_id(db, user.tenant_id, deployment_id).await {
+        Ok(Some(deployment)) => deployment,
+        _ => {
+            return Err(Redirect::to(uri!(tracking(
+                slug = user.tenant_slug,
+                deployment_id = Option::<i64>::None
+            ))))
+        }
+    };
+    let discussion = match deployment_discussion_service::find_discussion_by_id(
+        db,
+        user.tenant_id,
+        deployment_id,
+        discussion_id,
+    )
+    .await
+    .ok()
+    .flatten()
+    {
+        Some(discussion) => discussion,
+        None => {
+            return Err(Redirect::to(uri!(tracking(
+                slug = user.tenant_slug,
+                deployment_id = Some(deployment_id)
+            ))))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+
+    Ok(Template::render(
+        "tracking/discussion_edit",
+        context! {
+            title: "Edit discussion",
+            current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            deployment: deployment,
+            users: users,
+            discussion_id: discussion_id,
+            error: Option::<String>::None,
+            form: DiscussionFormView::new(discussion.message, discussion.tagged_user_id),
+        },
+    ))
+}
+
+#[post("/<slug>/tracking/deployments/<deployment_id>/discussions/<discussion_id>", data = "<form>")]
+pub async fn tracking_discussion_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    deployment_id: i64,
+    discussion_id: i64,
+    form: Form<DiscussionForm>,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::can_edit(db, &user, "tracking").await {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let deployments = if access_service::is_employee(&user.role) {
+        let crew_ids =
+            crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+                .await
+                .unwrap_or_default();
+        deployment_service::list_deployments_for_select_for_crews(db, user.tenant_id, &crew_ids)
+            .await
+            .unwrap_or_default()
+    } else {
+        deployment_service::list_deployments_for_select(db, user.tenant_id)
+            .await
+            .unwrap_or_default()
+    };
+    let deployment = match deployment_repo::find_deployment_by_id(db, user.tenant_id, deployment_id).await {
+        Ok(Some(deployment)) => deployment,
+        _ => {
+            return Err(
+                render_tracking_error(db, &user, deployments, None, "Deployment not found.").await,
+            )
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+
+    match deployment_discussion_service::update_discussion(
+        db,
+        user.tenant_id,
+        deployment_id,
+        discussion_id,
+        form,
+    )
+    .await
+    {
+        Ok(_) => Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Some(deployment_id)
+        )))),
+        Err(err) => Err(Template::render(
+            "tracking/discussion_edit",
+            context! {
+                title: "Edit discussion",
+                current_user: Some(CurrentUserView::from(&user)),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                deployment: deployment,
+                users: users,
+                discussion_id: discussion_id,
+                error: err.message,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[post("/<slug>/tracking/deployments/<deployment_id>/discussions/<discussion_id>/delete")]
+pub async fn tracking_discussion_delete(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    deployment_id: i64,
+    discussion_id: i64,
+) -> Result<Redirect, Template> {
+    let user = match workspace_user(cookies, db, slug).await {
+        Ok(user) => user,
+        Err(redirect) => return Ok(redirect),
+    };
+    if !access_service::can_delete(db, &user, "tracking").await {
+        return Ok(Redirect::to(uri!(tracking(
+            slug = user.tenant_slug,
+            deployment_id = Option::<i64>::None
+        ))));
+    }
+
+    if let Err(message) = deployment_discussion_service::delete_discussion(
+        db,
+        user.tenant_id,
+        deployment_id,
+        discussion_id,
+    )
+    .await
+    .map_err(|err| format!("Unable to delete discussion: {err}"))
+    {
+        let deployments = if access_service::is_employee(&user.role) {
+            let crew_ids =
+                crew_member_repo::list_crew_ids_for_user(db, user.tenant_id, user.id, &user.email)
+                    .await
+                    .unwrap_or_default();
+            deployment_service::list_deployments_for_select_for_crews(
+                db,
+                user.tenant_id,
+                &crew_ids,
+            )
+            .await
+            .unwrap_or_default()
+        } else {
+            deployment_service::list_deployments_for_select(db, user.tenant_id)
+                .await
+                .unwrap_or_default()
+        };
+        return Err(
+            render_tracking_error(
+                db,
+                &user,
+                deployments,
+                Some(deployment_id),
+                &message,
+            )
+            .await,
+        );
+    }
+
+    Ok(Redirect::to(uri!(tracking(
+        slug = user.tenant_slug,
+        deployment_id = Some(deployment_id)
+    ))))
 }
 
 async fn render_tracking_error(
@@ -1697,6 +2063,20 @@ async fn render_tracking_error(
     let coverage_map = build_live_coverage_map(db, user).await;
     let coverage_map_json =
         serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
+    let discussions = match selected_deployment {
+        Some(deployment_id) if deployment_id > 0 => {
+            deployment_discussion_service::list_discussions_by_deployment(
+                db,
+                user.tenant_id,
+                deployment_id,
+            )
+            .await
+            .unwrap_or_default()
+        }
+        _ => Vec::new(),
+    };
+    let can_edit_tracking = access_service::can_edit(db, &user, "tracking").await;
+    let can_delete_tracking = access_service::can_delete(db, &user, "tracking").await;
     Template::render(
         "tracking/index",
         context! {
@@ -1716,6 +2096,9 @@ async fn render_tracking_error(
             missing_user_ids: missing_user_ids,
             is_owner: is_owner,
             can_edit_updates: can_edit_updates,
+            can_edit_tracking: can_edit_tracking,
+            can_delete_tracking: can_delete_tracking,
+            discussions: discussions,
             active_timer: active_timer,
             form: DeploymentUpdateFormView::new(
                 selected_deployment.unwrap_or(0),
