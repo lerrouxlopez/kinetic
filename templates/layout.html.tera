@@ -11,6 +11,8 @@
     {% set brand_hue = 32 %}
     {% set brand_body_font = "Space Grotesk" %}
     {% set brand_heading_font = "Space Grotesk" %}
+    {% set meta_description = "Kinetic is an asset and manpower tracking platform for operations, scheduling, and client delivery." %}
+    {% set share_image = "https://kineticapp.online/static/logo.png" %}
     {% if workspace_brand is defined %}
       {% set brand_name = workspace_brand.app_name %}
       {% set brand_logo = workspace_brand.logo_url %}
@@ -22,6 +24,16 @@
       {% set brand_heading_font = workspace_brand.heading_font %}
     {% endif %}
     <title>{{ title }} | {{ brand_name }}</title>
+    <meta name="description" content="{{ meta_description }}">
+    <meta property="og:title" content="{{ title }} | {{ brand_name }}">
+    <meta property="og:description" content="{{ meta_description }}">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="{{ share_image }}">
+    <meta property="og:url" content="https://kineticapp.online">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ title }} | {{ brand_name }}">
+    <meta name="twitter:description" content="{{ meta_description }}">
+    <meta name="twitter:image" content="{{ share_image }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
