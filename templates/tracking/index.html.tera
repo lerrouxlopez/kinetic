@@ -15,6 +15,7 @@
     {% if error %}
       <div class="alert alert-danger">{{ error }}</div>
     {% endif %}
+    {% set selected_deployment_id = selected_deployment | default(value=0) %}
 
     <div class="card glass-card p-4 mb-4">
       <div class="d-flex align-items-center justify-content-between mb-3">
@@ -60,16 +61,16 @@
           </form>
         </div>
         <div class="col-lg-3">
-          {% if selected_deployment and selected_deployment > 0 %}
-            {% if active_timer and active_timer.deployment_id == selected_deployment %}
+          {% if selected_deployment_id > 0 %}
+            {% if active_timer and active_timer.deployment_id == selected_deployment_id %}
               <form method="post" action="/{{ current_user.tenant_slug }}/tracking/stop">
-                <input type="hidden" name="deployment_id" value="{{ selected_deployment }}">
+                <input type="hidden" name="deployment_id" value="{{ selected_deployment_id }}">
                 <button class="btn btn-outline-danger w-100" type="submit">Stop work</button>
                 <div class="text-muted small mt-2">Started at {{ active_timer.start_at }}</div>
               </form>
             {% else %}
               <form method="post" action="/{{ current_user.tenant_slug }}/tracking/start">
-                <input type="hidden" name="deployment_id" value="{{ selected_deployment }}">
+                <input type="hidden" name="deployment_id" value="{{ selected_deployment_id }}">
                 <button class="btn btn-outline-primary w-100" type="submit" {% if active_timer %}disabled{% endif %}>Start work</button>
                 {% if active_timer %}
                   <div class="text-muted small mt-2">Finish the active timer first.</div>
@@ -122,8 +123,8 @@
         <div class="card glass-card p-3">
           <div class="d-flex align-items-center justify-content-between mb-3 px-2">
             <h3 class="h6 fw-semibold mb-0">Discussions</h3>
-            {% if selected_deployment is defined and selected_deployment > 0 and can_edit_tracking %}
-              <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment }}/discussions/new">Add discussion</a>
+            {% if selected_deployment_id > 0 and can_edit_tracking %}
+              <a class="btn btn-sm btn-outline-primary" href="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment_id }}/discussions/new">Add discussion</a>
             {% else %}
               <button class="btn btn-sm btn-outline-primary" type="button" disabled>Add discussion</button>
             {% endif %}
@@ -140,7 +141,7 @@
                 </tr>
               </thead>
               <tbody>
-                {% if selected_deployment is not defined or selected_deployment == 0 %}
+                {% if selected_deployment_id == 0 %}
                   <tr>
                     <td colspan="5" class="text-center text-muted py-4">Select a deployment to view discussions.</td>
                   </tr>
@@ -153,13 +154,13 @@
                       <td class="text-muted">{{ discussion.created_at }}</td>
                       <td class="text-end">
                         {% if can_edit_tracking %}
-                          <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment }}/discussions/{{ discussion.id }}/edit" title="Edit" aria-label="Edit">
+                          <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment_id }}/discussions/{{ discussion.id }}/edit" title="Edit" aria-label="Edit">
                             <i class="bi bi-pencil"></i>
                             <span class="visually-hidden">Edit</span>
                           </a>
                         {% endif %}
                         {% if can_delete_tracking %}
-                          <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment }}/discussions/{{ discussion.id }}/delete" onsubmit="return confirm('Delete this discussion?');">
+                          <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/tracking/deployments/{{ selected_deployment_id }}/discussions/{{ discussion.id }}/delete" onsubmit="return confirm('Delete this discussion?');">
                             <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
                               <i class="bi bi-trash"></i>
                               <span class="visually-hidden">Delete</span>
@@ -186,14 +187,14 @@
               <h3 class="h6 fw-semibold mb-0">Updates</h3>
               <div class="text-muted small">{{ updates | length }} entries</div>
             </div>
-            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#daily-update-form" aria-expanded="false" aria-controls="daily-update-form" {% if selected_deployment is not defined or selected_deployment == 0 or not can_edit_tracking %}disabled{% endif %}>
+            <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#daily-update-form" aria-expanded="false" aria-controls="daily-update-form" {% if selected_deployment_id == 0 or not can_edit_tracking %}disabled{% endif %}>
               Add Daily Update
             </button>
           </div>
           <div class="collapse mb-3" id="daily-update-form" data-show-update="{% if error %}true{% else %}false{% endif %}">
             <div class="card border-0 bg-transparent">
               <form method="post" action="/{{ current_user.tenant_slug }}/tracking">
-                <input type="hidden" name="deployment_id" value="{{ selected_deployment | default(value=0) }}">
+                <input type="hidden" name="deployment_id" value="{{ selected_deployment_id }}">
                 <div class="mb-3">
                   <label class="form-label">Work date</label>
                   <input class="form-control" type="date" name="work_date" value="{{ form.work_date }}" required>
@@ -212,7 +213,7 @@
                   <label class="form-label">Update</label>
                   <textarea class="form-control" name="notes" rows="4" required>{{ form.notes }}</textarea>
                 </div>
-                <button class="btn btn-primary w-100" type="submit" {% if selected_deployment is not defined or selected_deployment == 0 %}disabled{% endif %}>
+                <button class="btn btn-primary w-100" type="submit" {% if selected_deployment_id == 0 %}disabled{% endif %}>
                   Save update
                 </button>
               </form>
