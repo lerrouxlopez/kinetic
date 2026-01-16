@@ -4,6 +4,7 @@ pub mod auth_service;
 pub mod client_service;
 pub mod crew_service;
 pub mod appointment_service;
+pub mod discussion_service;
 pub mod deployment_service;
 pub mod email_service;
 pub mod invoice_service;

@@ -21,6 +21,7 @@
             <th>ID</th>
             <th>Slug</th>
             <th>Name</th>
+            <th>Plan</th>
             <th class="text-end">Actions</th>
           </tr>
         </thead>
@@ -30,6 +31,7 @@
               <td>{{ workspace.id }}</td>
               <td>{{ workspace.slug }}</td>
               <td>{{ workspace.name }}</td>
+              <td class="text-uppercase">{{ workspace.plan_key }}</td>
               <td class="text-end">
                 <a class="btn btn-sm btn-outline-light" href="/admin/workspaces/{{ workspace.id }}/edit" title="Edit" aria-label="Edit">
                   <i class="bi bi-pencil"></i>
@@ -48,7 +50,7 @@
             </tr>
           {% else %}
             <tr>
-              <td colspan="4" class="text-center text-muted py-4">No workspaces yet.</td>
+              <td colspan="5" class="text-center text-muted py-4">No workspaces yet.</td>
             </tr>
           {% endfor %}
         </tbody>

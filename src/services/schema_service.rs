@@ -603,6 +603,26 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     .execute(&db.0)
     .await?;
 
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS client_discussions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tenant_id INTEGER NOT NULL,
+            client_id INTEGER NOT NULL,
+            author_id INTEGER NOT NULL,
+            tagged_user_id INTEGER,
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY(client_id) REFERENCES clients(id),
+            FOREIGN KEY(author_id) REFERENCES users(id),
+            FOREIGN KEY(tagged_user_id) REFERENCES users(id),
+            FOREIGN KEY(tenant_id) REFERENCES tenants(id)
+        )
+        "#,
+    )
+    .execute(&db.0)
+    .await?;
+
     seed_admin(db).await?;
     seed_client_data(db).await?;
 

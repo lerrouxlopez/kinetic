@@ -1,5 +1,6 @@
 pub mod admin_repo;
 pub mod client_repo;
+pub mod discussion_repo;
 pub mod crew_repo;
 pub mod crew_member_repo;
 pub mod appointment_repo;
