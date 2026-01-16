@@ -149,6 +149,17 @@ pub fn theme_options() -> Vec<ThemeOption> {
     ]
 }
 
+pub fn font_options() -> Vec<&'static str> {
+    vec![
+        "Space Grotesk",
+        "Sora",
+        "DM Sans",
+        "IBM Plex Sans",
+        "Work Sans",
+        "Space Mono",
+    ]
+}
+
 pub fn plan_definitions() -> Vec<PlanDefinition> {
     vec![
         PlanDefinition {
@@ -635,116 +646,208 @@ pub async fn update_email_settings(
         return Err(WorkspaceEmailSettingsError {
             message: "From address is required.".to_string(),
             form: WorkspaceEmailSettingsView::new(
-                email_provider, form.from_name, "", form.smtp_host, form.smtp_port,
-                form.smtp_username, form.smtp_password, form.smtp_encryption, form.mailgun_domain,
-                form.mailgun_api_key, form.postmark_server_token, form.resend_api_key,
-                form.ses_access_key, form.ses_secret_key, form.ses_region, form.sendmail_path,
+                email_provider,
+                form.from_name,
+                "",
+                form.smtp_host.clone().unwrap_or_default(),
+                form.smtp_port.clone().unwrap_or_default(),
+                form.smtp_username.clone().unwrap_or_default(),
+                form.smtp_password.clone().unwrap_or_default(),
+                form.smtp_encryption.clone().unwrap_or_default(),
+                form.mailgun_domain.clone().unwrap_or_default(),
+                form.mailgun_api_key.clone().unwrap_or_default(),
+                form.postmark_server_token.clone().unwrap_or_default(),
+                form.resend_api_key.clone().unwrap_or_default(),
+                form.ses_access_key.clone().unwrap_or_default(),
+                form.ses_secret_key.clone().unwrap_or_default(),
+                form.ses_region.clone().unwrap_or_default(),
+                form.sendmail_path.clone().unwrap_or_default(),
             ),
         });
     }
 
+    let smtp_host = form.smtp_host.unwrap_or_default();
+    let smtp_port = form.smtp_port.unwrap_or_default();
+    let smtp_username = form.smtp_username.unwrap_or_default();
+    let smtp_password = form.smtp_password.unwrap_or_default();
+    let smtp_encryption = form.smtp_encryption.unwrap_or_default();
+    let mailgun_domain = form.mailgun_domain.unwrap_or_default();
+    let mailgun_api_key = form.mailgun_api_key.unwrap_or_default();
+    let postmark_server_token = form.postmark_server_token.unwrap_or_default();
+    let resend_api_key = form.resend_api_key.unwrap_or_default();
+    let ses_access_key = form.ses_access_key.unwrap_or_default();
+    let ses_secret_key = form.ses_secret_key.unwrap_or_default();
+    let ses_region = form.ses_region.unwrap_or_default();
+    let sendmail_path = form.sendmail_path.unwrap_or_default();
+
     let required = match email_provider.as_str() {
         "Mailtrap" | "SMTP" => {
             let mut missing = Vec::new();
-            if form.smtp_host.trim().is_empty() {
+            if smtp_host.trim().is_empty() {
                 missing.push("SMTP host");
             }
-            if form.smtp_port.trim().is_empty() {
+            if smtp_port.trim().is_empty() {
                 missing.push("SMTP port");
             }
-            if form.smtp_username.trim().is_empty() {
+            if smtp_username.trim().is_empty() {
                 missing.push("SMTP username");
             }
-            if form.smtp_password.trim().is_empty() {
+            if smtp_password.trim().is_empty() {
                 missing.push("SMTP password");
             }
             if !missing.is_empty() {
                 return Err(WorkspaceEmailSettingsError {
                     message: format!("Missing required fields: {}.", missing.join(", ")),
                     form: WorkspaceEmailSettingsView::new(
-                        email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                        form.smtp_username, form.smtp_password, form.smtp_encryption,
-                        form.mailgun_domain, form.mailgun_api_key, form.postmark_server_token,
-                        form.resend_api_key, form.ses_access_key, form.ses_secret_key,
-                        form.ses_region, form.sendmail_path,
+                        email_provider,
+                        form.from_name,
+                        from_address,
+                        smtp_host,
+                        smtp_port,
+                        smtp_username,
+                        smtp_password,
+                        smtp_encryption,
+                        mailgun_domain,
+                        mailgun_api_key,
+                        postmark_server_token,
+                        resend_api_key,
+                        ses_access_key,
+                        ses_secret_key,
+                        ses_region,
+                        sendmail_path,
                     ),
                 });
             }
             true
         }
         "Amazon SES (Simple Email Service)" => {
-            if form.ses_access_key.trim().is_empty()
-                || form.ses_secret_key.trim().is_empty()
-                || form.ses_region.trim().is_empty()
+            if ses_access_key.trim().is_empty()
+                || ses_secret_key.trim().is_empty()
+                || ses_region.trim().is_empty()
             {
                 return Err(WorkspaceEmailSettingsError {
                     message: "SES access key, secret key, and region are required.".to_string(),
                     form: WorkspaceEmailSettingsView::new(
-                        email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                        form.smtp_username, form.smtp_password, form.smtp_encryption,
-                        form.mailgun_domain, form.mailgun_api_key, form.postmark_server_token,
-                        form.resend_api_key, form.ses_access_key, form.ses_secret_key,
-                        form.ses_region, form.sendmail_path,
+                        email_provider,
+                        form.from_name,
+                        from_address,
+                        smtp_host,
+                        smtp_port,
+                        smtp_username,
+                        smtp_password,
+                        smtp_encryption,
+                        mailgun_domain,
+                        mailgun_api_key,
+                        postmark_server_token,
+                        resend_api_key,
+                        ses_access_key,
+                        ses_secret_key,
+                        ses_region,
+                        sendmail_path,
                     ),
                 });
             }
             true
         }
         "Mailgun" => {
-            if form.mailgun_domain.trim().is_empty() || form.mailgun_api_key.trim().is_empty() {
+            if mailgun_domain.trim().is_empty() || mailgun_api_key.trim().is_empty() {
                 return Err(WorkspaceEmailSettingsError {
                     message: "Mailgun domain and API key are required.".to_string(),
                     form: WorkspaceEmailSettingsView::new(
-                        email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                        form.smtp_username, form.smtp_password, form.smtp_encryption,
-                        form.mailgun_domain, form.mailgun_api_key, form.postmark_server_token,
-                        form.resend_api_key, form.ses_access_key, form.ses_secret_key,
-                        form.ses_region, form.sendmail_path,
+                        email_provider,
+                        form.from_name,
+                        from_address,
+                        smtp_host,
+                        smtp_port,
+                        smtp_username,
+                        smtp_password,
+                        smtp_encryption,
+                        mailgun_domain,
+                        mailgun_api_key,
+                        postmark_server_token,
+                        resend_api_key,
+                        ses_access_key,
+                        ses_secret_key,
+                        ses_region,
+                        sendmail_path,
                     ),
                 });
             }
             true
         }
         "Postmark" => {
-            if form.postmark_server_token.trim().is_empty() {
+            if postmark_server_token.trim().is_empty() {
                 return Err(WorkspaceEmailSettingsError {
                     message: "Postmark server token is required.".to_string(),
                     form: WorkspaceEmailSettingsView::new(
-                        email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                        form.smtp_username, form.smtp_password, form.smtp_encryption,
-                        form.mailgun_domain, form.mailgun_api_key, form.postmark_server_token,
-                        form.resend_api_key, form.ses_access_key, form.ses_secret_key,
-                        form.ses_region, form.sendmail_path,
+                        email_provider,
+                        form.from_name,
+                        from_address,
+                        smtp_host,
+                        smtp_port,
+                        smtp_username,
+                        smtp_password,
+                        smtp_encryption,
+                        mailgun_domain,
+                        mailgun_api_key,
+                        postmark_server_token,
+                        resend_api_key,
+                        ses_access_key,
+                        ses_secret_key,
+                        ses_region,
+                        sendmail_path,
                     ),
                 });
             }
             true
         }
         "Resend" => {
-            if form.resend_api_key.trim().is_empty() {
+            if resend_api_key.trim().is_empty() {
                 return Err(WorkspaceEmailSettingsError {
                     message: "Resend API key is required.".to_string(),
                     form: WorkspaceEmailSettingsView::new(
-                        email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                        form.smtp_username, form.smtp_password, form.smtp_encryption,
-                        form.mailgun_domain, form.mailgun_api_key, form.postmark_server_token,
-                        form.resend_api_key, form.ses_access_key, form.ses_secret_key,
-                        form.ses_region, form.sendmail_path,
+                        email_provider,
+                        form.from_name,
+                        from_address,
+                        smtp_host,
+                        smtp_port,
+                        smtp_username,
+                        smtp_password,
+                        smtp_encryption,
+                        mailgun_domain,
+                        mailgun_api_key,
+                        postmark_server_token,
+                        resend_api_key,
+                        ses_access_key,
+                        ses_secret_key,
+                        ses_region,
+                        sendmail_path,
                     ),
                 });
             }
             true
         }
         "Sendmail" => {
-            if form.sendmail_path.trim().is_empty() {
+            if sendmail_path.trim().is_empty() {
                 return Err(WorkspaceEmailSettingsError {
                     message: "Sendmail path is required.".to_string(),
                     form: WorkspaceEmailSettingsView::new(
-                        email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                        form.smtp_username, form.smtp_password, form.smtp_encryption,
-                        form.mailgun_domain, form.mailgun_api_key, form.postmark_server_token,
-                        form.resend_api_key, form.ses_access_key, form.ses_secret_key,
-                        form.ses_region, form.sendmail_path,
+                        email_provider,
+                        form.from_name,
+                        from_address,
+                        smtp_host,
+                        smtp_port,
+                        smtp_username,
+                        smtp_password,
+                        smtp_encryption,
+                        mailgun_domain,
+                        mailgun_api_key,
+                        postmark_server_token,
+                        resend_api_key,
+                        ses_access_key,
+                        ses_secret_key,
+                        ses_region,
+                        sendmail_path,
                     ),
                 });
             }
@@ -757,10 +860,22 @@ pub async fn update_email_settings(
         return Err(WorkspaceEmailSettingsError {
             message: "Email provider is not supported.".to_string(),
             form: WorkspaceEmailSettingsView::new(
-                email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                form.smtp_username, form.smtp_password, form.smtp_encryption, form.mailgun_domain,
-                form.mailgun_api_key, form.postmark_server_token, form.resend_api_key,
-                form.ses_access_key, form.ses_secret_key, form.ses_region, form.sendmail_path,
+                email_provider,
+                form.from_name,
+                from_address,
+                smtp_host,
+                smtp_port,
+                smtp_username,
+                smtp_password,
+                smtp_encryption,
+                mailgun_domain,
+                mailgun_api_key,
+                postmark_server_token,
+                resend_api_key,
+                ses_access_key,
+                ses_secret_key,
+                ses_region,
+                sendmail_path,
             ),
         });
     }
@@ -771,29 +886,41 @@ pub async fn update_email_settings(
         &email_provider,
         form.from_name.trim(),
         &from_address,
-        form.smtp_host.trim(),
-        form.smtp_port.trim(),
-        form.smtp_username.trim(),
-        form.smtp_password.trim(),
-        form.smtp_encryption.trim(),
-        form.mailgun_domain.trim(),
-        form.mailgun_api_key.trim(),
-        form.postmark_server_token.trim(),
-        form.resend_api_key.trim(),
-        form.ses_access_key.trim(),
-        form.ses_secret_key.trim(),
-        form.ses_region.trim(),
-        form.sendmail_path.trim(),
+        smtp_host.trim(),
+        smtp_port.trim(),
+        smtp_username.trim(),
+        smtp_password.trim(),
+        smtp_encryption.trim(),
+        mailgun_domain.trim(),
+        mailgun_api_key.trim(),
+        postmark_server_token.trim(),
+        resend_api_key.trim(),
+        ses_access_key.trim(),
+        ses_secret_key.trim(),
+        ses_region.trim(),
+        sendmail_path.trim(),
     )
     .await
     {
         return Err(WorkspaceEmailSettingsError {
             message: format!("Unable to update email settings: {err}"),
             form: WorkspaceEmailSettingsView::new(
-                email_provider, form.from_name, from_address, form.smtp_host, form.smtp_port,
-                form.smtp_username, form.smtp_password, form.smtp_encryption, form.mailgun_domain,
-                form.mailgun_api_key, form.postmark_server_token, form.resend_api_key,
-                form.ses_access_key, form.ses_secret_key, form.ses_region, form.sendmail_path,
+                email_provider,
+                form.from_name,
+                from_address,
+                smtp_host,
+                smtp_port,
+                smtp_username,
+                smtp_password,
+                smtp_encryption,
+                mailgun_domain,
+                mailgun_api_key,
+                postmark_server_token,
+                resend_api_key,
+                ses_access_key,
+                ses_secret_key,
+                ses_region,
+                sendmail_path,
             ),
         });
     }
@@ -846,6 +973,8 @@ pub async fn update_theme_settings(
                 logo_url: logo_path.unwrap_or(existing.logo_url),
                 theme_key,
                 background_hue: existing.background_hue,
+                body_font: existing.body_font.clone(),
+                heading_font: existing.heading_font.clone(),
             },
         });
     }
@@ -854,6 +983,41 @@ pub async fn update_theme_settings(
         .background_hue
         .unwrap_or(existing.background_hue)
         .clamp(0, 360);
+    let body_font = form
+        .body_font
+        .unwrap_or_else(|| existing.body_font.clone())
+        .trim()
+        .to_string();
+    let body_font = if body_font.is_empty() {
+        existing.body_font.clone()
+    } else {
+        body_font
+    };
+    let heading_font = form
+        .heading_font
+        .unwrap_or_else(|| existing.heading_font.clone())
+        .trim()
+        .to_string();
+    let heading_font = if heading_font.is_empty() {
+        existing.heading_font.clone()
+    } else {
+        heading_font
+    };
+    if !font_options().iter().any(|option| option.eq(&body_font))
+        || !font_options().iter().any(|option| option.eq(&heading_font))
+    {
+        return Err(WorkspaceThemeError {
+            message: "Font selection is invalid.".to_string(),
+            form: WorkspaceThemeView {
+                app_name,
+                logo_url: logo_path.unwrap_or(existing.logo_url),
+                theme_key,
+                background_hue,
+                body_font,
+                heading_font,
+            },
+        });
+    }
     let current_logo = find_workspace_by_id(db, id)
         .await
         .ok()
@@ -868,6 +1032,8 @@ pub async fn update_theme_settings(
         &app_name,
         &theme_key,
         background_hue,
+        &body_font,
+        &heading_font,
         &resolved_logo,
     )
     .await
@@ -879,6 +1045,8 @@ pub async fn update_theme_settings(
                 logo_url: resolved_logo,
                 theme_key,
                 background_hue,
+                body_font,
+                heading_font,
             },
         });
     }
@@ -919,6 +1087,8 @@ pub fn workspace_theme_view(workspace: &Workspace) -> WorkspaceThemeView {
         logo_url: logo_url_from_path(&workspace.logo_path),
         theme_key: workspace.theme_key.clone(),
         background_hue: workspace.background_hue,
+        body_font: workspace.body_font.clone(),
+        heading_font: workspace.heading_font.clone(),
     }
 }
 
@@ -928,6 +1098,8 @@ pub fn default_theme_view() -> WorkspaceThemeView {
         logo_url: "/static/logo.png".to_string(),
         theme_key: "kinetic".to_string(),
         background_hue: 32,
+        body_font: "Space Grotesk".to_string(),
+        heading_font: "Space Grotesk".to_string(),
     }
 }
 
@@ -942,6 +1114,8 @@ pub fn workspace_brand_view(workspace: &Workspace) -> WorkspaceBrandView {
         logo_url: logo_url_from_path(&workspace.logo_path),
         theme_key: workspace.theme_key.clone(),
         background_hue: workspace.background_hue,
+        body_font: workspace.body_font.clone(),
+        heading_font: workspace.heading_font.clone(),
         primary,
         secondary,
         on_primary,
@@ -955,6 +1129,8 @@ pub fn default_workspace_brand_view() -> WorkspaceBrandView {
         logo_url: "/static/logo.png".to_string(),
         theme_key: "kinetic".to_string(),
         background_hue: 32,
+        body_font: "Space Grotesk".to_string(),
+        heading_font: "Space Grotesk".to_string(),
         primary,
         secondary,
         on_primary,
@@ -1172,12 +1348,12 @@ pub async fn seed_demo_data(db: &Db, tenant_id: i64) -> Result<(), String> {
             (index - 1) % 28 + 1,
             index % 60
         );
-        let status = if index % 3 == 0 {
-            "On Going"
-        } else if index % 5 == 0 {
-            "Cancelled"
-        } else {
-            "Scheduled"
+        let status = match index % 5 {
+            0 => "No-Show",
+            1 => "Scheduled",
+            2 => "Confirmed",
+            3 => "Attended",
+            _ => "Cancelled",
         };
         sqlx::query(
             r#"

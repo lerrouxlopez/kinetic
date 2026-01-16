@@ -61,19 +61,19 @@ pub struct WorkspaceEmailSettingsForm {
     pub email_provider: String,
     pub from_name: String,
     pub from_address: String,
-    pub smtp_host: String,
-    pub smtp_port: String,
-    pub smtp_username: String,
-    pub smtp_password: String,
-    pub smtp_encryption: String,
-    pub mailgun_domain: String,
-    pub mailgun_api_key: String,
-    pub postmark_server_token: String,
-    pub resend_api_key: String,
-    pub ses_access_key: String,
-    pub ses_secret_key: String,
-    pub ses_region: String,
-    pub sendmail_path: String,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<String>,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    pub smtp_encryption: Option<String>,
+    pub mailgun_domain: Option<String>,
+    pub mailgun_api_key: Option<String>,
+    pub postmark_server_token: Option<String>,
+    pub resend_api_key: Option<String>,
+    pub ses_access_key: Option<String>,
+    pub ses_secret_key: Option<String>,
+    pub ses_region: Option<String>,
+    pub sendmail_path: Option<String>,
 }
 
 #[derive(FromForm)]
@@ -81,6 +81,8 @@ pub struct WorkspaceThemeForm<'r> {
     pub app_name: Option<String>,
     pub theme_key: Option<String>,
     pub background_hue: Option<i64>,
+    pub body_font: Option<String>,
+    pub heading_font: Option<String>,
     pub logo: Option<TempFile<'r>>,
 }
 
@@ -88,6 +90,9 @@ pub struct WorkspaceThemeForm<'r> {
 pub struct CrewForm {
     pub name: String,
     pub status: String,
+    pub gear_score: i64,
+    pub skill_tags: String,
+    pub compatibility_tags: String,
 }
 
 #[derive(FromForm)]
@@ -96,6 +101,7 @@ pub struct CrewMemberForm {
     pub name: String,
     pub phone: String,
     pub position: String,
+    pub availability_status: String,
 }
 
 #[derive(FromForm)]
@@ -137,6 +143,9 @@ pub struct DeploymentForm {
     pub fee_per_hour: f64,
     pub info: String,
     pub status: String,
+    pub deployment_type: String,
+    pub required_skills: String,
+    pub compatibility_pref: String,
 }
 
 #[derive(FromForm)]
@@ -197,6 +206,8 @@ pub struct Workspace {
     pub logo_path: String,
     pub theme_key: String,
     pub background_hue: i64,
+    pub body_font: String,
+    pub heading_font: String,
     pub plan_key: String,
     pub plan_started_at: String,
     pub plan_expired: bool,
@@ -230,6 +241,9 @@ pub struct Crew {
     pub name: String,
     pub members_count: i64,
     pub status: String,
+    pub gear_score: i64,
+    pub skill_tags: String,
+    pub compatibility_tags: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -242,6 +256,7 @@ pub struct CrewMember {
     pub phone: String,
     pub email: String,
     pub position: String,
+    pub availability_status: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -256,6 +271,7 @@ pub struct Client {
     pub longitude: String,
     pub stage: String,
     pub currency: String,
+    pub portal_token: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -295,6 +311,9 @@ pub struct Deployment {
     pub fee_per_hour: f64,
     pub info: String,
     pub status: String,
+    pub deployment_type: String,
+    pub required_skills: String,
+    pub compatibility_pref: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -307,6 +326,14 @@ pub struct DeploymentSummary {
     pub fee_per_hour: f64,
     pub info: String,
     pub status: String,
+    pub deployment_type: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct DeploymentTimelineStep {
+    pub label: String,
+    pub state: String,
+    pub note: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -424,6 +451,9 @@ pub struct WorkspaceFormView {
 pub struct CrewFormView {
     pub name: String,
     pub status: String,
+    pub gear_score: i64,
+    pub skill_tags: String,
+    pub compatibility_tags: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -432,6 +462,18 @@ pub struct CrewMemberFormView {
     pub name: String,
     pub phone: String,
     pub position: String,
+    pub availability_status: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct CrewRosterView {
+    pub id: i64,
+    pub name: String,
+    pub status: String,
+    pub members_count: i64,
+    pub readiness_score: i64,
+    pub skill_tags: String,
+    pub compatibility_tags: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -473,6 +515,9 @@ pub struct DeploymentFormView {
     pub fee_per_hour: f64,
     pub info: String,
     pub status: String,
+    pub deployment_type: String,
+    pub required_skills: String,
+    pub compatibility_pref: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -517,6 +562,8 @@ pub struct WorkspaceThemeView {
     pub logo_url: String,
     pub theme_key: String,
     pub background_hue: i64,
+    pub body_font: String,
+    pub heading_font: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -525,6 +572,8 @@ pub struct WorkspaceBrandView {
     pub logo_url: String,
     pub theme_key: String,
     pub background_hue: i64,
+    pub body_font: String,
+    pub heading_font: String,
     pub primary: String,
     pub secondary: String,
     pub on_primary: String,
@@ -702,10 +751,19 @@ impl WorkspaceEmailSettingsView {
 }
 
 impl CrewFormView {
-    pub fn new(name: impl Into<String>, status: impl Into<String>) -> Self {
+    pub fn new(
+        name: impl Into<String>,
+        status: impl Into<String>,
+        gear_score: i64,
+        skill_tags: impl Into<String>,
+        compatibility_tags: impl Into<String>,
+    ) -> Self {
         CrewFormView {
             name: name.into(),
             status: status.into(),
+            gear_score,
+            skill_tags: skill_tags.into(),
+            compatibility_tags: compatibility_tags.into(),
         }
     }
 }
@@ -716,12 +774,14 @@ impl CrewMemberFormView {
         name: impl Into<String>,
         phone: impl Into<String>,
         position: impl Into<String>,
+        availability_status: impl Into<String>,
     ) -> Self {
         CrewMemberFormView {
             user_id,
             name: name.into(),
             phone: phone.into(),
             position: position.into(),
+            availability_status: availability_status.into(),
         }
     }
 }
@@ -795,6 +855,9 @@ impl DeploymentFormView {
         fee_per_hour: f64,
         info: impl Into<String>,
         status: impl Into<String>,
+        deployment_type: impl Into<String>,
+        required_skills: impl Into<String>,
+        compatibility_pref: impl Into<String>,
     ) -> Self {
         DeploymentFormView {
             client_id,
@@ -804,6 +867,9 @@ impl DeploymentFormView {
             fee_per_hour,
             info: info.into(),
             status: status.into(),
+            deployment_type: deployment_type.into(),
+            required_skills: required_skills.into(),
+            compatibility_pref: compatibility_pref.into(),
         }
     }
 }

@@ -1,4 +1,5 @@
 use rocket_db_pools::sqlx;
+use rand_core::{OsRng, RngCore};
 
 use crate::models::{
     Client,
@@ -64,6 +65,14 @@ pub async fn find_client_by_id(
     client_id: i64,
 ) -> Result<Option<Client>, sqlx::Error> {
     client_repo::find_client_by_id(db, tenant_id, client_id).await
+}
+
+pub async fn find_client_by_portal_token(
+    db: &Db,
+    tenant_id: i64,
+    portal_token: &str,
+) -> Result<Option<Client>, sqlx::Error> {
+    client_repo::find_client_by_portal_token(db, tenant_id, portal_token).await
 }
 
 pub async fn create_client(
@@ -142,6 +151,7 @@ pub async fn create_client(
         });
     }
 
+    let portal_token = generate_portal_token();
     if let Err(err) = client_repo::create_client(
         db,
         tenant_id,
@@ -153,6 +163,7 @@ pub async fn create_client(
         form.longitude.trim(),
         stage.trim(),
         currency.trim(),
+        &portal_token,
     )
     .await
     {
@@ -172,6 +183,20 @@ pub async fn create_client(
     }
 
     Ok(())
+}
+
+pub async fn ensure_portal_token(
+    db: &Db,
+    tenant_id: i64,
+    client_id: i64,
+    existing: &str,
+) -> Result<String, sqlx::Error> {
+    if !existing.trim().is_empty() {
+        return Ok(existing.to_string());
+    }
+    let token = generate_portal_token();
+    client_repo::update_portal_token(db, tenant_id, client_id, &token).await?;
+    Ok(token)
 }
 
 pub async fn update_client(
@@ -444,4 +469,10 @@ pub async fn delete_contact(
     client_repo::delete_contact(db, tenant_id, client_id, contact_id)
         .await
         .map_err(|err| format!("Unable to delete contact: {err}"))
+}
+
+fn generate_portal_token() -> String {
+    let mut bytes = [0u8; 16];
+    OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|byte| format!("{:02x}", byte)).collect()
 }

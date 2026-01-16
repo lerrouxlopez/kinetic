@@ -23,17 +23,24 @@
 }
 
 body.app-shell {
-  font-family: "Space Grotesk", system-ui, sans-serif;
+  font-family: var(--kinetic-font-body), "Space Grotesk", system-ui, sans-serif;
   color: var(--kinetic-ink);
-  background: radial-gradient(
-    circle at top left,
-    hsl(var(--kinetic-bg-hue) 100% 95%),
-    #f8fafc 55%,
-    hsl(calc(var(--kinetic-bg-hue) + 35) 100% 96%) 100%
-  );
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(
+      circle at top left,
+      hsl(var(--kinetic-bg-hue) 100% 95%),
+      rgba(248, 250, 252, 0.9) 55%,
+      hsl(calc(var(--kinetic-bg-hue) + 35) 100% 96%) 100%
+    ),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.06) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.06) 1px, transparent 1px);
+  background-size: auto, 84px 84px, 84px 84px;
+  background-position: 0 0, 0 0, 0 0;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  animation: ops-grid-drift 90s linear infinite;
 }
 
 .page-glow {
@@ -45,6 +52,15 @@ body.app-shell {
   filter: blur(2px);
   pointer-events: none;
   z-index: 0;
+}
+
+@keyframes ops-grid-drift {
+  from {
+    background-position: 0 0, 0 0, 0 0;
+  }
+  to {
+    background-position: 0 0, 420px 0, 0 420px;
+  }
 }
 
 .navbar {
@@ -61,7 +77,7 @@ body.app-shell {
 }
 
 .brand-title {
-  font-family: "Avenir Next", "Avenir", "Futura", "Trebuchet MS", sans-serif;
+  font-family: var(--kinetic-font-heading), "Space Grotesk", system-ui, sans-serif;
   font-style: italic;
   font-weight: 900;
   font-size: clamp(1.6rem, 2.2vw, 2.4rem);
@@ -92,6 +108,28 @@ body.app-shell {
   border-radius: 20px;
   backdrop-filter: blur(8px);
   box-shadow: 0 24px 50px rgba(15, 23, 42, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::after {
+  content: "";
+  position: absolute;
+  inset: -60% -20%;
+  background: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.25) 50%, transparent 70%);
+  opacity: 0.12;
+  transform: translateX(-40%);
+  animation: ops-scan 16s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes ops-scan {
+  from {
+    transform: translateX(-50%);
+  }
+  to {
+    transform: translateX(50%);
+  }
 }
 
 .stat-tile {
@@ -99,6 +137,51 @@ body.app-shell {
   border-radius: 16px;
   background: #ffffff;
   border: 1px solid var(--kinetic-border);
+}
+
+.ops-live {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--kinetic-muted);
+  margin-left: 12px;
+}
+
+.ops-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--kinetic-primary);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--kinetic-primary) 70%, transparent);
+  animation: ops-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes ops-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.stat-value {
+  font-family: var(--kinetic-font-heading), "Space Grotesk", system-ui, sans-serif;
 }
 
 .crew-badge {
@@ -216,6 +299,132 @@ body.app-shell {
 .stagebar-label {
   position: relative;
   z-index: 3;
+}
+
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--heatmap-cols), minmax(0, 1fr));
+  gap: 8px;
+}
+
+.heatmap-cell {
+  height: 54px;
+  border-radius: 12px;
+  border: 1px solid var(--kinetic-border);
+  background: rgba(255, 255, 255, 0.7);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: var(--kinetic-ink);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+
+.heatmap-level-0 {
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--kinetic-muted);
+}
+
+.heatmap-level-1 {
+  background: color-mix(in srgb, var(--kinetic-primary) 20%, #ffffff);
+}
+
+.heatmap-level-2 {
+  background: color-mix(in srgb, var(--kinetic-primary) 45%, #ffffff);
+}
+
+.heatmap-level-3 {
+  background: linear-gradient(135deg, var(--kinetic-primary), var(--kinetic-primary-dark));
+  color: var(--kinetic-on-primary);
+}
+
+.heatmap-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.heatmap-legend-item {
+  border: 1px solid var(--kinetic-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.coverage-map {
+  height: 360px;
+  border-radius: 18px;
+  border: 1px solid var(--kinetic-border);
+  overflow: hidden;
+}
+
+.coverage-legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.coverage-legend-item {
+  border: 1px solid var(--kinetic-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.coverage-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15, 23, 42, 0.2);
+  flex: 0 0 auto;
+}
+
+.coverage-legend-swatch.is-inactive {
+  background: #94a3b8;
+}
+
+.coverage-legend-swatch.is-active {
+  background: #22c55e;
+}
+
+.deployment-timeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.deployment-timeline-step {
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--kinetic-border);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.deployment-timeline-step.is-complete {
+  background: color-mix(in srgb, var(--kinetic-primary) 30%, #ffffff);
+  border-color: color-mix(in srgb, var(--kinetic-primary) 40%, #ffffff);
+}
+
+.deployment-timeline-step.is-active {
+  background: color-mix(in srgb, var(--kinetic-primary-dark) 18%, #ffffff);
+  border-color: color-mix(in srgb, var(--kinetic-primary-dark) 30%, #ffffff);
+}
+
+.deployment-timeline-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--kinetic-muted);
+  font-weight: 600;
+}
+
+.deployment-timeline-note {
+  margin-top: 2px;
+  font-size: 0.78rem;
+  color: var(--kinetic-ink);
+  font-weight: 500;
 }
 
 .stat-label {

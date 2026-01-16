@@ -17,6 +17,28 @@
     {% endif %}
 
     <div class="card glass-card p-4 mb-4">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <h3 class="h6 fw-semibold mb-1">Live coverage map</h3>
+          <p class="text-muted small mb-0">Active crew coverage across client locations.</p>
+        </div>
+        <div class="text-muted small" id="coverage-active-count">0 active</div>
+      </div>
+      <div id="coverage-map" class="coverage-map"></div>
+      <div id="coverage-empty" class="text-muted small mt-3 d-none">No client locations available.</div>
+      <div class="coverage-legend mt-3" id="coverage-legend">
+        <div class="coverage-legend-item">
+          <span class="coverage-legend-swatch is-inactive"></span>
+          <div class="text-muted small">Client location</div>
+        </div>
+        <div class="coverage-legend-item">
+          <span class="coverage-legend-swatch is-active"></span>
+          <div class="text-muted small">Active deployment</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card glass-card p-4 mb-4">
       <div class="row g-3 align-items-end">
         <div class="col-lg-6">
           <label class="form-label">Deployment</label>
@@ -163,10 +185,16 @@
                     {% if is_owner or (update.is_placeholder and update.user_id == current_user_id) %}
                       <td>
                         <div class="d-flex gap-2">
-                          <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/tracking/updates/{{ update.id }}/edit">Edit</a>
+                          <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/tracking/updates/{{ update.id }}/edit" title="Edit" aria-label="Edit">
+                            <i class="bi bi-pencil"></i>
+                            <span class="visually-hidden">Edit</span>
+                          </a>
                           {% if is_owner %}
                             <form method="post" action="/{{ current_user.tenant_slug }}/tracking/updates/{{ update.id }}/delete">
-                              <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                              <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                                <i class="bi bi-trash"></i>
+                                <span class="visually-hidden">Delete</span>
+                              </button>
                             </form>
                           {% endif %}
                         </div>
@@ -184,5 +212,57 @@
         </div>
       </div>
     </div>
+
+    <script type="application/json" id="coverage-map-data">{{ coverage_map_json | safe }}</script>
+    <script>
+      const coverageMap = JSON.parse(document.getElementById("coverage-map-data")?.textContent || "{}");
+      const mapEl = document.getElementById("coverage-map");
+      const emptyEl = document.getElementById("coverage-empty");
+      const countEl = document.getElementById("coverage-active-count");
+      if (countEl && coverageMap && typeof coverageMap.total_active === "number") {
+        countEl.textContent = `${coverageMap.total_active} active`;
+      }
+      if (!mapEl || typeof L === "undefined") {
+        if (emptyEl) {
+          emptyEl.textContent = "Map library unavailable.";
+          emptyEl.classList.remove("d-none");
+        }
+      } else {
+        const map = L.map("coverage-map", { scrollWheelZoom: false });
+        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          attribution: "&copy; OpenStreetMap contributors",
+          maxZoom: 19
+        }).addTo(map);
+        const points = Array.isArray(coverageMap.points) ? coverageMap.points : [];
+        const bounds = [];
+        points.forEach((point) => {
+          const lat = Number(point.lat);
+          const lng = Number(point.lng);
+          if (Number.isNaN(lat) || Number.isNaN(lng)) {
+            return;
+          }
+          const isActive = Number(point.active_count) > 0;
+          const label = isActive
+            ? `${point.client_name} (${point.active_count} active)`
+            : `${point.client_name}`;
+          const marker = L.circleMarker([lat, lng], {
+            radius: isActive ? 9 : 7,
+            color: "#111827",
+            fillColor: isActive ? "#22c55e" : "#94a3b8",
+            fillOpacity: 0.85,
+            weight: 1
+          });
+          marker.bindPopup(label);
+          marker.addTo(map);
+          bounds.push([lat, lng]);
+        });
+        if (bounds.length > 0) {
+          map.fitBounds(bounds, { padding: [20, 20] });
+        } else if (emptyEl) {
+          emptyEl.classList.remove("d-none");
+        }
+        setTimeout(() => map.invalidateSize(), 0);
+      }
+    </script>
   </div>
 {% endblock content %}

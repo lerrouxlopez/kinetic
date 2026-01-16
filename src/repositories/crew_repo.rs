@@ -5,7 +5,7 @@ use crate::Db;
 
 pub async fn list_crews(db: &Db, tenant_id: i64) -> Result<Vec<Crew>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, tenant_id, name, members_count, status FROM crews WHERE tenant_id = ? ORDER BY id DESC",
+        "SELECT id, tenant_id, name, members_count, status, gear_score, skill_tags, compatibility_tags FROM crews WHERE tenant_id = ? ORDER BY id DESC",
     )
     .bind(tenant_id)
     .fetch_all(&db.0)
@@ -19,13 +19,16 @@ pub async fn list_crews(db: &Db, tenant_id: i64) -> Result<Vec<Crew>, sqlx::Erro
             name: row.get("name"),
             members_count: row.get("members_count"),
             status: row.get("status"),
+            gear_score: row.get("gear_score"),
+            skill_tags: row.get("skill_tags"),
+            compatibility_tags: row.get("compatibility_tags"),
         })
         .collect())
 }
 
 pub async fn list_crews_all(db: &Db) -> Result<Vec<Crew>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, tenant_id, name, members_count, status FROM crews ORDER BY id DESC",
+        "SELECT id, tenant_id, name, members_count, status, gear_score, skill_tags, compatibility_tags FROM crews ORDER BY id DESC",
     )
     .fetch_all(&db.0)
     .await?;
@@ -38,6 +41,9 @@ pub async fn list_crews_all(db: &Db) -> Result<Vec<Crew>, sqlx::Error> {
             name: row.get("name"),
             members_count: row.get("members_count"),
             status: row.get("status"),
+            gear_score: row.get("gear_score"),
+            skill_tags: row.get("skill_tags"),
+            compatibility_tags: row.get("compatibility_tags"),
         })
         .collect())
 }
@@ -49,7 +55,7 @@ pub async fn list_crews_paged(
     offset: i64,
 ) -> Result<Vec<Crew>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, tenant_id, name, members_count, status FROM crews WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
+        "SELECT id, tenant_id, name, members_count, status, gear_score, skill_tags, compatibility_tags FROM crews WHERE tenant_id = ? ORDER BY id DESC LIMIT ? OFFSET ?",
     )
     .bind(tenant_id)
     .bind(limit)
@@ -65,6 +71,9 @@ pub async fn list_crews_paged(
             name: row.get("name"),
             members_count: row.get("members_count"),
             status: row.get("status"),
+            gear_score: row.get("gear_score"),
+            skill_tags: row.get("skill_tags"),
+            compatibility_tags: row.get("compatibility_tags"),
         })
         .collect())
 }
@@ -92,13 +101,41 @@ pub async fn count_crews_by_status(db: &Db, status: &str) -> Result<i64, sqlx::E
     Ok(row.get("count"))
 }
 
+pub async fn list_idle_crews(
+    db: &Db,
+    tenant_id: i64,
+    limit: i64,
+) -> Result<Vec<Crew>, sqlx::Error> {
+    let rows = sqlx::query(
+        "SELECT id, tenant_id, name, members_count, status, gear_score, skill_tags, compatibility_tags FROM crews WHERE tenant_id = ? AND status = 'Idle' ORDER BY id DESC LIMIT ?",
+    )
+    .bind(tenant_id)
+    .bind(limit)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| Crew {
+            id: row.get("id"),
+            tenant_id: row.get("tenant_id"),
+            name: row.get("name"),
+            members_count: row.get("members_count"),
+            status: row.get("status"),
+            gear_score: row.get("gear_score"),
+            skill_tags: row.get("skill_tags"),
+            compatibility_tags: row.get("compatibility_tags"),
+        })
+        .collect())
+}
+
 pub async fn find_crew_by_id(
     db: &Db,
     tenant_id: i64,
     crew_id: i64,
 ) -> Result<Option<Crew>, sqlx::Error> {
     let row = sqlx::query(
-        "SELECT id, tenant_id, name, members_count, status FROM crews WHERE id = ? AND tenant_id = ?",
+        "SELECT id, tenant_id, name, members_count, status, gear_score, skill_tags, compatibility_tags FROM crews WHERE id = ? AND tenant_id = ?",
     )
     .bind(crew_id)
     .bind(tenant_id)
@@ -111,6 +148,9 @@ pub async fn find_crew_by_id(
         name: row.get("name"),
         members_count: row.get("members_count"),
         status: row.get("status"),
+        gear_score: row.get("gear_score"),
+        skill_tags: row.get("skill_tags"),
+        compatibility_tags: row.get("compatibility_tags"),
     }))
 }
 
@@ -119,14 +159,20 @@ pub async fn create_crew(
     tenant_id: i64,
     name: &str,
     status: &str,
+    gear_score: i64,
+    skill_tags: &str,
+    compatibility_tags: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "INSERT INTO crews (tenant_id, name, members_count, status) VALUES (?, ?, ?, ?)",
+        "INSERT INTO crews (tenant_id, name, members_count, status, gear_score, skill_tags, compatibility_tags) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(tenant_id)
     .bind(name)
     .bind(0)
     .bind(status)
+    .bind(gear_score)
+    .bind(skill_tags)
+    .bind(compatibility_tags)
     .execute(&db.0)
     .await?;
     Ok(())
@@ -138,12 +184,18 @@ pub async fn update_crew(
     crew_id: i64,
     name: &str,
     status: &str,
+    gear_score: i64,
+    skill_tags: &str,
+    compatibility_tags: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE crews SET name = ?, status = ? WHERE id = ? AND tenant_id = ?",
+        "UPDATE crews SET name = ?, status = ?, gear_score = ?, skill_tags = ?, compatibility_tags = ? WHERE id = ? AND tenant_id = ?",
     )
     .bind(name)
     .bind(status)
+    .bind(gear_score)
+    .bind(skill_tags)
+    .bind(compatibility_tags)
     .bind(crew_id)
     .bind(tenant_id)
     .execute(&db.0)

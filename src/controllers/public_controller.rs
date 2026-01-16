@@ -20,7 +20,16 @@ use crate::models::{
     WorkspaceRegisterView,
     WorkspaceEmailSettingsForm,
 };
-use crate::repositories::{crew_member_repo, user_repo};
+use crate::repositories::{
+    client_repo,
+    crew_member_repo,
+    deployment_repo,
+    deployment_update_repo,
+    email_repo,
+    invoice_repo,
+    tenant_repo,
+    user_repo,
+};
 use crate::services::{
     access_service,
     auth_service,
@@ -35,6 +44,7 @@ use crate::services::{
 };
 use crate::Db;
 use chrono::Utc;
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -51,6 +61,78 @@ fn to_datetime_local(value: &str) -> String {
 
 fn is_theme_locked(plan_key: &str) -> bool {
     plan_key.eq_ignore_ascii_case("free")
+}
+
+fn portal_progress(status: &str, update_count: i64) -> i64 {
+    let base = if status.eq_ignore_ascii_case("completed") {
+        100
+    } else if status.eq_ignore_ascii_case("active") {
+        60
+    } else if status.eq_ignore_ascii_case("scheduled") {
+        20
+    } else if status.eq_ignore_ascii_case("cancelled") {
+        0
+    } else {
+        10
+    };
+    let boost = if status.eq_ignore_ascii_case("completed") {
+        0
+    } else {
+        (update_count * 5).min(30)
+    };
+    (base + boost).min(100)
+}
+
+fn portal_window(start_at: &str, end_at: &str) -> String {
+    let start_trimmed = start_at.trim();
+    let end_trimmed = end_at.trim();
+    if start_trimmed.is_empty() && end_trimmed.is_empty() {
+        "TBD".to_string()
+    } else if end_trimmed.is_empty() {
+        format!("Starts {start_trimmed}")
+    } else if start_trimmed.is_empty() {
+        format!("Ends {end_trimmed}")
+    } else {
+        format!("{start_trimmed} - {end_trimmed}")
+    }
+}
+
+fn portal_note_preview(note: &str) -> String {
+    let trimmed = note.trim();
+    if trimmed.len() <= 120 {
+        trimmed.to_string()
+    } else {
+        format!("{}...", &trimmed[..120])
+    }
+}
+
+fn is_truthy(value: Option<&str>) -> bool {
+    matches!(value, Some("1" | "true" | "yes" | "on"))
+}
+
+fn recommended_crews_view(
+    crews: &[crate::models::Crew],
+    required_skills: &str,
+    compatibility_pref: &str,
+) -> Vec<serde_json::Value> {
+    if required_skills.trim().is_empty() && compatibility_pref.trim().is_empty() {
+        return Vec::new();
+    }
+    crew_service::recommend_crews(crews, required_skills, compatibility_pref)
+        .into_iter()
+        .filter(|rec| rec.score > 0)
+        .take(3)
+        .map(|rec| {
+            serde_json::json!({
+                "id": rec.id,
+                "name": rec.name,
+                "status": rec.status,
+                "score": rec.score,
+                "skill_matches": rec.skill_matches,
+                "compatibility_matches": rec.compatibility_matches
+            })
+        })
+        .collect()
 }
 
 async fn current_user_from_cookies(
@@ -286,6 +368,200 @@ pub fn logout(cookies: &CookieJar<'_>) -> Redirect {
     Redirect::to(uri!(index))
 }
 
+#[get("/portal/view/<slug>/<token>?<hide_completed>")]
+pub async fn client_portal(
+    db: &Db,
+    slug: &str,
+    token: &str,
+    hide_completed: Option<String>,
+) -> Template {
+    let hide_completed_flag = is_truthy(hide_completed.as_deref());
+    let tenant_id = match tenant_repo::find_tenant_id_by_slug(db, slug).await {
+        Ok(Some(id)) => id,
+        _ => {
+            return Template::render(
+                "clients/portal",
+                context! {
+                    title: "Client portal",
+                    current_user: Option::<CurrentUserView>::None,
+                    workspace_brand: workspace_service::default_workspace_brand_view(),
+                    client_name: "Client portal".to_string(),
+                    portal_error: "Invalid portal link.".to_string(),
+                    portal_slug: slug,
+                    portal_token: token,
+                    is_portal: true,
+                    hide_completed: hide_completed_flag,
+                    deployments: Vec::<serde_json::Value>::new(),
+                    active_deployments: 0,
+                    completed_deployments: 0,
+                    overall_progress: 0,
+                },
+            );
+        }
+    };
+
+    let workspace_brand = workspace_brand(db, tenant_id).await;
+    let client = match client_service::find_client_by_portal_token(db, tenant_id, token).await {
+        Ok(Some(client)) => client,
+        _ => {
+            return Template::render(
+                "clients/portal",
+                context! {
+                    title: "Client portal",
+                    current_user: Option::<CurrentUserView>::None,
+                    workspace_brand: workspace_brand,
+                    client_name: "Client portal".to_string(),
+                    portal_error: "Portal link not found.".to_string(),
+                    portal_slug: slug,
+                    portal_token: token,
+                    is_portal: true,
+                    hide_completed: hide_completed_flag,
+                    deployments: Vec::<serde_json::Value>::new(),
+                    active_deployments: 0,
+                    completed_deployments: 0,
+                    overall_progress: 0,
+                },
+            );
+        }
+    };
+
+    let deployments = deployment_repo::list_deployments_with_names_by_client(
+        db,
+        tenant_id,
+        client.id,
+    )
+    .await
+    .unwrap_or_default();
+    let deployment_ids = deployments.iter().map(|deployment| deployment.id).collect::<Vec<_>>();
+    let update_counts = deployment_update_repo::count_updates_for_deployments(
+        db,
+        tenant_id,
+        &deployment_ids,
+    )
+    .await
+    .unwrap_or_default();
+    let latest_updates = deployment_update_repo::list_latest_updates_for_deployments(
+        db,
+        tenant_id,
+        &deployment_ids,
+    )
+    .await
+    .unwrap_or_default();
+    let update_map = update_counts
+        .into_iter()
+        .collect::<HashMap<i64, i64>>();
+    let latest_map = latest_updates
+        .into_iter()
+        .map(|(deployment_id, work_date, start_time, notes)| {
+            (deployment_id, (work_date, start_time, notes))
+        })
+        .collect::<HashMap<i64, (String, String, String)>>();
+
+    let mut progress_total = 0i64;
+    let mut deployments_view = Vec::new();
+    for deployment in deployments.iter() {
+        if hide_completed_flag && deployment.status.eq_ignore_ascii_case("completed") {
+            continue;
+        }
+        let update_count = *update_map.get(&deployment.id).unwrap_or(&0);
+        let progress = portal_progress(&deployment.status, update_count);
+        progress_total += progress;
+        let latest_update = match latest_map.get(&deployment.id) {
+            Some((work_date, start_time, notes)) => format!(
+                "{} {} - {}",
+                work_date,
+                start_time,
+                portal_note_preview(notes)
+            ),
+            None => "No updates yet.".to_string(),
+        };
+        let expected_window = portal_window(&deployment.start_at, &deployment.end_at);
+        deployments_view.push(context! {
+            id: deployment.id,
+            crew_name: deployment.crew_name.clone(),
+            status: deployment.status.clone(),
+            deployment_type: deployment.deployment_type.clone(),
+            info: deployment.info.clone(),
+            expected_window: expected_window,
+            progress: progress,
+            updates_total: update_count,
+            latest_update: latest_update,
+        });
+    }
+    let active_deployments = deployments
+        .iter()
+        .filter(|deployment| deployment.status.eq_ignore_ascii_case("active"))
+        .count() as i64;
+    let completed_deployments = deployments
+        .iter()
+        .filter(|deployment| deployment.status.eq_ignore_ascii_case("completed"))
+        .count() as i64;
+    let overall_progress = if deployments.is_empty() {
+        0
+    } else {
+        (progress_total / deployments.len() as i64).min(100)
+    };
+
+    Template::render(
+        "clients/portal",
+        context! {
+            title: format!("{} portal", client.company_name),
+            current_user: Option::<CurrentUserView>::None,
+            workspace_brand: workspace_brand,
+            client_name: client.company_name.clone(),
+            portal_error: "".to_string(),
+            portal_slug: slug,
+            portal_token: token,
+            is_portal: true,
+            hide_completed: hide_completed_flag,
+            client: client,
+            deployments: deployments_view,
+            active_deployments: active_deployments,
+            completed_deployments: completed_deployments,
+            overall_progress: overall_progress,
+        },
+    )
+}
+
+#[post("/portal/view/<slug>/<token>/deployments/<deployment_id>/complete?<hide_completed>")]
+pub async fn client_portal_mark_complete(
+    db: &Db,
+    slug: &str,
+    token: &str,
+    deployment_id: i64,
+    hide_completed: Option<String>,
+) -> Redirect {
+    let hide_completed_flag = is_truthy(hide_completed.as_deref());
+    let portal_redirect = if hide_completed_flag {
+        Redirect::to(format!("/portal/view/{}/{}?hide_completed=1", slug, token))
+    } else {
+        Redirect::to(uri!(client_portal(slug = slug, token = token, hide_completed = Option::<String>::None)))
+    };
+    let tenant_id = match tenant_repo::find_tenant_id_by_slug(db, slug).await {
+        Ok(Some(id)) => id,
+        _ => return portal_redirect,
+    };
+    let client = match client_service::find_client_by_portal_token(db, tenant_id, token).await {
+        Ok(Some(client)) => client,
+        _ => return portal_redirect,
+    };
+    let deployment = match deployment_repo::find_deployment_by_id(db, tenant_id, deployment_id).await {
+        Ok(Some(deployment)) => deployment,
+        _ => return portal_redirect,
+    };
+    if deployment.client_id != client.id {
+        return portal_redirect;
+    }
+    let _ = deployment_repo::update_deployment_status(
+        db,
+        tenant_id,
+        deployment_id,
+        "Completed",
+    )
+    .await;
+    portal_redirect
+}
+
 #[get("/<slug>/dashboard")]
 pub async fn dashboard(
     cookies: &CookieJar<'_>,
@@ -434,7 +710,7 @@ pub async fn dashboard(
     } else {
         Vec::new()
     };
-    let appointment_statuses = ["Scheduled", "On Going", "Cancelled"];
+    let appointment_statuses = ["Scheduled", "Confirmed", "Attended", "Cancelled", "No-Show"];
     let appointment_status_chart = appointment_statuses
         .iter()
         .map(|status| {
@@ -570,6 +846,83 @@ pub async fn dashboard(
     } else {
         0
     };
+    let new_deployments_today = if can_view_deployments {
+        if is_admin_workspace {
+            deployment_repo::count_new_deployments_today_all(db)
+                .await
+                .unwrap_or(0)
+        } else {
+            deployment_repo::count_new_deployments_today(db, user.tenant_id)
+                .await
+                .unwrap_or(0)
+        }
+    } else {
+        0
+    };
+    let overdue_updates = if can_view_tracking {
+        deployment_update_repo::list_overdue_active_deployments(db, user.tenant_id, 24)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let idle_crews = if can_view_crew {
+        crew_service::list_idle_crews(db, user.tenant_id, 5)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let outcome_kpis = if can_view_deployments {
+        let avg_hours_to_ready = deployment_update_repo::average_hours_to_first_update(
+            db,
+            user.tenant_id,
+        )
+        .await
+        .unwrap_or(0.0);
+        let completed_total =
+            deployment_update_repo::count_completed_deployments(db, user.tenant_id)
+                .await
+                .unwrap_or(0);
+        let issue_completed =
+            deployment_update_repo::count_completed_with_issue_keywords(db, user.tenant_id)
+                .await
+                .unwrap_or(0);
+        let rework_completed =
+            deployment_update_repo::count_completed_with_rework_keywords(db, user.tenant_id)
+                .await
+                .unwrap_or(0);
+        let first_time_fix = if completed_total > 0 {
+            (((completed_total - issue_completed) as f64 / completed_total as f64) * 100.0)
+                .round() as i64
+        } else {
+            0
+        };
+        let rework_rate = if completed_total > 0 {
+            ((rework_completed as f64 / completed_total as f64) * 100.0).round() as i64
+        } else {
+            0
+        };
+        let active_deployments = deployment_status_counts
+            .iter()
+            .find(|(label, _)| label.eq_ignore_ascii_case("Active"))
+            .map(|(_, count)| *count)
+            .unwrap_or(0);
+        let utilization = if crews_total > 0 {
+            ((active_deployments as f64 / crews_total as f64) * 100.0).round() as i64
+        } else {
+            0
+        };
+        Some(context! {
+            avg_hours_to_ready: avg_hours_to_ready,
+            first_time_fix: first_time_fix,
+            rework_rate: rework_rate,
+            utilization: utilization,
+            quality: first_time_fix,
+        })
+    } else {
+        None
+    };
     let crew_stats = if can_view_crew {
         let crews = if is_admin_workspace {
             crew_service::list_crews_all(db).await.unwrap_or_default()
@@ -644,6 +997,10 @@ pub async fn dashboard(
             invoice_sent_total: invoice_sent_total,
             invoice_paid_total: invoice_paid_total,
             tracking_reports_total: tracking_reports_total,
+            new_deployments_today: new_deployments_today,
+            overdue_updates: overdue_updates,
+            idle_crews: idle_crews,
+            outcome_kpis: outcome_kpis,
             active_timer: active_timer,
             active_timer_label: active_timer_label,
         },
@@ -764,6 +1121,9 @@ pub async fn tracking(
         .cloned()
         .collect::<Vec<_>>();
     let chart_data = build_hours_chart(&chart_updates);
+    let coverage_map = build_live_coverage_map(db, &user).await;
+    let coverage_map_json =
+        serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
     let can_edit_updates = is_owner
         || updates
             .iter()
@@ -779,6 +1139,8 @@ pub async fn tracking(
             selected_deployment: selected_deployment,
             updates: updates,
             chart_data: chart_data,
+            coverage_map_json: coverage_map_json,
+            include_map: true,
             error: Option::<String>::None,
             is_employee: access_service::is_employee(&user.role),
             is_admin_viewer: is_admin_viewer,
@@ -842,6 +1204,9 @@ pub async fn tracking_update_create(
                     .await
                     .ok()
                     .flatten();
+                let coverage_map = build_live_coverage_map(db, &user).await;
+                let coverage_map_json =
+                    serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
                 return Err(Template::render(
                     "tracking/index",
                     context! {
@@ -853,6 +1218,8 @@ pub async fn tracking_update_create(
                         selected_deployment: Option::<i64>::None,
                         updates: Vec::<crate::models::DeploymentUpdate>::new(),
                         chart_data: build_hours_chart(&[]),
+                        coverage_map_json: coverage_map_json,
+                        include_map: true,
                         error: "You do not have access to that deployment.".to_string(),
                         is_employee: access_service::is_employee(&user.role),
                         is_admin_viewer: access_service::is_owner(&user.role) || access_service::is_admin(&user.role),
@@ -922,6 +1289,9 @@ pub async fn tracking_update_create(
                 .cloned()
                 .collect::<Vec<_>>();
             let chart_data = build_hours_chart(&chart_updates);
+            let coverage_map = build_live_coverage_map(db, &user).await;
+            let coverage_map_json =
+                serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
             let can_edit_updates = is_owner
                 || updates
                     .iter()
@@ -937,6 +1307,8 @@ pub async fn tracking_update_create(
                     selected_deployment: selected_deployment,
                     updates: updates,
                     chart_data: chart_data,
+                    coverage_map_json: coverage_map_json,
+                    include_map: true,
                     error: err.message,
                     is_employee: access_service::is_employee(&user.role),
                     is_admin_viewer: is_admin_viewer,
@@ -1231,6 +1603,9 @@ pub async fn tracking_update_delete(
                 .cloned()
                 .collect::<Vec<_>>();
             let chart_data = build_hours_chart(&chart_updates);
+            let coverage_map = build_live_coverage_map(db, &user).await;
+            let coverage_map_json =
+                serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
             let can_edit_updates = true;
             let active_timer = tracking_service::active_timer(db, user.tenant_id, user.id)
                 .await
@@ -1247,6 +1622,8 @@ pub async fn tracking_update_delete(
                     selected_deployment: selected_deployment,
                     updates: updates,
                     chart_data: chart_data,
+                    coverage_map_json: coverage_map_json,
+                    include_map: true,
                     error: message,
                     is_employee: access_service::is_employee(&user.role),
                     is_admin_viewer: true,
@@ -1317,6 +1694,9 @@ async fn render_tracking_error(
         .await
         .ok()
         .flatten();
+    let coverage_map = build_live_coverage_map(db, user).await;
+    let coverage_map_json =
+        serde_json::to_string(&coverage_map).unwrap_or_else(|_| "{}".to_string());
     Template::render(
         "tracking/index",
         context! {
@@ -1328,6 +1708,8 @@ async fn render_tracking_error(
             selected_deployment: selected_deployment,
             updates: updates,
             chart_data: chart_data,
+            coverage_map_json: coverage_map_json,
+            include_map: true,
             error: message.to_string(),
             is_employee: access_service::is_employee(&user.role),
             is_admin_viewer: is_admin_viewer,
@@ -1344,6 +1726,49 @@ async fn render_tracking_error(
             ),
         },
     )
+}
+
+async fn build_live_coverage_map(db: &Db, user: &crate::models::User) -> serde_json::Value {
+    let deployment_ids = deployment_repo::list_active_deployment_ids(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+    let locations =
+        deployment_repo::list_deployment_locations_by_ids(db, user.tenant_id, &deployment_ids)
+            .await
+            .unwrap_or_default();
+
+    let mut active_by_client: HashMap<i64, i64> = HashMap::new();
+    for row in locations {
+        *active_by_client.entry(row.client_id).or_insert(0) += 1;
+    }
+
+    let clients = client_repo::list_clients(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+    let mut points = Vec::new();
+    let mut total_active = 0;
+    for client in clients {
+        let lat = client.latitude.parse::<f64>().ok();
+        let lng = client.longitude.parse::<f64>().ok();
+        if lat.is_none() || lng.is_none() {
+            continue;
+        }
+        let active_count = *active_by_client.get(&client.id).unwrap_or(&0);
+        if active_count > 0 {
+            total_active += active_count;
+        }
+        points.push(serde_json::json!({
+            "lat": lat.unwrap(),
+            "lng": lng.unwrap(),
+            "client_name": client.company_name,
+            "active_count": active_count
+        }));
+    }
+
+    serde_json::json!({
+        "points": points,
+        "total_active": total_active
+    })
 }
 
 fn build_hours_chart(updates: &[crate::models::DeploymentUpdate]) -> serde_json::Value {
@@ -1506,11 +1931,59 @@ pub async fn settings(
             email_provider_options: workspace_service::email_provider_options(),
             theme_form: theme_form,
             theme_options: theme_options,
+            font_options: workspace_service::font_options(),
             active_tab: active_tab,
             is_owner: is_owner,
             is_theme_locked: theme_locked,
             users: users_context,
             role_options: access_service::role_options(),
+        },
+    ))
+}
+
+#[get("/<slug>/email-log")]
+pub async fn email_log(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+) -> Result<Template, Redirect> {
+    let user = workspace_user(cookies, db, slug).await?;
+    if !access_service::can_view(db, &user, "settings").await {
+        return Err(Redirect::to(uri!(dashboard(slug = user.tenant_slug))));
+    }
+
+    let logs = email_repo::list_outbound_emails_for_tenant(db, user.tenant_id, 100)
+        .await
+        .unwrap_or_default();
+    let status_counts = email_service::count_outbound_emails_by_status(db, user.tenant_id)
+        .await
+        .unwrap_or_default();
+    let queued_total = status_counts
+        .iter()
+        .find(|(status, _)| status.eq_ignore_ascii_case("Queued"))
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+    let sent_total = status_counts
+        .iter()
+        .find(|(status, _)| status.eq_ignore_ascii_case("Sent"))
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+    let failed_total = status_counts
+        .iter()
+        .find(|(status, _)| status.eq_ignore_ascii_case("Failed"))
+        .map(|(_, count)| *count)
+        .unwrap_or(0);
+
+    Ok(Template::render(
+        "emails/log",
+        context! {
+            title: "Email log",
+            current_user: Some(CurrentUserView::from(&user)),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            logs: logs,
+            queued_total: queued_total,
+            sent_total: sent_total,
+            failed_total: failed_total,
         },
     ))
 }
@@ -1546,6 +2019,7 @@ pub async fn settings_email_update(
                 email_provider_options: workspace_service::email_provider_options(),
                 theme_form: workspace_service::default_theme_view(),
                 theme_options: workspace_service::theme_options(),
+                font_options: workspace_service::font_options(),
                 active_tab: "email",
                 is_owner: access_service::is_owner(&user.role),
                 is_theme_locked: is_theme_locked(&user.plan_key),
@@ -1597,6 +2071,7 @@ pub async fn settings_theme_update(
                 email_provider_options: workspace_service::email_provider_options(),
                 theme_form: existing_theme_form,
                 theme_options: workspace_service::theme_options(),
+                font_options: workspace_service::font_options(),
                 active_tab: "theme",
                 is_owner: true,
                 is_theme_locked: theme_locked,
@@ -1636,6 +2111,7 @@ pub async fn settings_theme_update(
                             email_provider_options: workspace_service::email_provider_options(),
                             theme_form: existing_theme_form,
                             theme_options: workspace_service::theme_options(),
+                            font_options: workspace_service::font_options(),
                             active_tab: "theme",
                             is_owner: true,
                             is_theme_locked: theme_locked,
@@ -1659,6 +2135,7 @@ pub async fn settings_theme_update(
                         email_provider_options: workspace_service::email_provider_options(),
                         theme_form: existing_theme_form,
                         theme_options: workspace_service::theme_options(),
+                        font_options: workspace_service::font_options(),
                         active_tab: "theme",
                         is_owner: true,
                         is_theme_locked: theme_locked,
@@ -1687,6 +2164,7 @@ pub async fn settings_theme_update(
                         email_provider_options: workspace_service::email_provider_options(),
                         theme_form: existing_theme_form,
                         theme_options: workspace_service::theme_options(),
+                        font_options: workspace_service::font_options(),
                         active_tab: "theme",
                         is_owner: true,
                         is_theme_locked: theme_locked,
@@ -1716,6 +2194,7 @@ pub async fn settings_theme_update(
                 email_provider_options: workspace_service::email_provider_options(),
                 theme_form: err.form,
                 theme_options: workspace_service::theme_options(),
+                font_options: workspace_service::font_options(),
                 active_tab: "theme",
                 is_owner: true,
                 is_theme_locked: theme_locked,
@@ -1769,6 +2248,7 @@ pub async fn settings_seed_demo(
                     email_provider_options: workspace_service::email_provider_options(),
                     theme_form: theme_form,
                     theme_options: workspace_service::theme_options(),
+                    font_options: workspace_service::font_options(),
                     active_tab: "email",
                     is_owner: access_service::is_owner(&user.role),
                     is_theme_locked: is_theme_locked(&user.plan_key),
@@ -1820,6 +2300,7 @@ pub async fn settings_users_update(
                 email_provider_options: workspace_service::email_provider_options(),
                 theme_form: workspace_service::default_theme_view(),
                 theme_options: workspace_service::theme_options(),
+                font_options: workspace_service::font_options(),
                 active_tab: "users",
                 is_owner: true,
                 is_theme_locked: is_theme_locked(&user.plan_key),
@@ -1857,6 +2338,7 @@ pub async fn settings_users_update(
                 email_provider_options: workspace_service::email_provider_options(),
                 theme_form: workspace_service::default_theme_view(),
                 theme_options: workspace_service::theme_options(),
+                font_options: workspace_service::font_options(),
                 active_tab: "users",
                 is_owner: true,
                 is_theme_locked: is_theme_locked(&user.plan_key),
@@ -1885,6 +2367,7 @@ pub async fn settings_users_update(
                 email_provider_options: workspace_service::email_provider_options(),
                 theme_form: workspace_service::default_theme_view(),
                 theme_options: workspace_service::theme_options(),
+                font_options: workspace_service::font_options(),
                 active_tab: "users",
                 is_owner: true,
                 is_theme_locked: is_theme_locked(&user.plan_key),
@@ -1933,6 +2416,31 @@ pub async fn deployments(
                     .all(|group| group.deployments.len() as i64 >= limit)
         })
         .unwrap_or(false);
+    let deployment_ids = groups
+        .iter()
+        .flat_map(|group| group.deployments.iter().map(|deployment| deployment.id))
+        .collect::<Vec<_>>();
+    let issue_flags = deployment_update_repo::list_issue_flags_for_deployments(
+        db,
+        user.tenant_id,
+        &deployment_ids,
+    )
+    .await
+    .unwrap_or_default();
+    let mut issue_map = HashMap::new();
+    for (deployment_id, issue_count, resolved_count) in issue_flags {
+        issue_map.insert(deployment_id, (issue_count, resolved_count));
+    }
+    let invoice_statuses = invoice_repo::list_invoice_statuses_for_deployments(
+        db,
+        user.tenant_id,
+        &deployment_ids,
+    )
+    .await
+    .unwrap_or_default();
+    let invoice_map = invoice_statuses
+        .into_iter()
+        .collect::<HashMap<i64, String>>();
     let deployments = groups
         .into_iter()
         .map(|group| {
@@ -1946,6 +2454,19 @@ pub async fn deployments(
                         &deployment.end_at,
                         deployment.fee_per_hour,
                     );
+                    let (issue_count, resolved_count) = issue_map
+                        .get(&deployment.id)
+                        .copied()
+                        .unwrap_or((0, 0));
+                    let invoice_status =
+                        invoice_map.get(&deployment.id).map(|status| status.as_str());
+                    let timeline = deployment_service::deployment_timeline(
+                        &deployment.status,
+                        &deployment.deployment_type,
+                        issue_count,
+                        resolved_count,
+                        invoice_status,
+                    );
                     context! {
                         id: deployment.id,
                         crew_id: deployment.crew_id,
@@ -1956,6 +2477,7 @@ pub async fn deployments(
                         calculated_fee: calculated_fee,
                         info: deployment.info,
                         status: deployment.status,
+                        timeline: timeline,
                     }
                 })
                 .collect::<Vec<_>>();
@@ -2000,6 +2522,7 @@ pub async fn deployment_new_form(
     let crews = crew_service::list_crews(db, user.tenant_id)
         .await
         .unwrap_or_default();
+    let recommended_crews = recommended_crews_view(&crews, "", "");
     Ok(Template::render(
         "deployments/new",
         context! {
@@ -2008,10 +2531,12 @@ pub async fn deployment_new_form(
                 current_user_id: user.id,
                 workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
-            form: DeploymentFormView::new(0, 0, "", "", 0.0, "", "Scheduled"),
+            form: DeploymentFormView::new(0, 0, "", "", 0.0, "", "Scheduled", "Onsite", "", ""),
             clients: clients,
             crews: crews,
+            recommended_crews: recommended_crews,
             status_options: deployment_service::status_options(),
+            deployment_type_options: deployment_service::deployment_type_options(),
         },
     ))
 }
@@ -2040,20 +2565,29 @@ pub async fn deployment_create(
 
     match deployment_service::create_deployment(db, user.tenant_id, form).await {
         Ok(_) => Ok(Redirect::to(uri!(deployments(slug = user.tenant_slug)))),
-        Err(err) => Err(Template::render(
-            "deployments/new",
-            context! {
-                title: "New deployment",
-                    current_user: Some(CurrentUserView::from(&user)),
-                    current_user_id: user.id,
-                    workspace_brand: workspace_brand(db, user.tenant_id).await,
-                error: err.message,
-                form: err.form,
-                clients: clients,
-                crews: crews,
-                status_options: deployment_service::status_options(),
-            },
-        )),
+        Err(err) => {
+            let recommended_crews = recommended_crews_view(
+                &crews,
+                &err.form.required_skills,
+                &err.form.compatibility_pref,
+            );
+            Err(Template::render(
+                "deployments/new",
+                context! {
+                    title: "New deployment",
+                        current_user: Some(CurrentUserView::from(&user)),
+                        current_user_id: user.id,
+                        workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    error: err.message,
+                    form: err.form,
+                    clients: clients,
+                    crews: crews,
+                    recommended_crews: recommended_crews,
+                    status_options: deployment_service::status_options(),
+                    deployment_type_options: deployment_service::deployment_type_options(),
+                },
+            ))
+        }
     }
 }
 
@@ -2089,6 +2623,11 @@ pub async fn deployment_edit_form(
     let crews = crew_service::list_crews(db, user.tenant_id)
         .await
         .unwrap_or_default();
+    let recommended_crews = recommended_crews_view(
+        &crews,
+        &deployment.required_skills,
+        &deployment.compatibility_pref,
+    );
 
     Ok(Template::render(
         "deployments/edit",
@@ -2107,10 +2646,15 @@ pub async fn deployment_edit_form(
                 deployment.fee_per_hour,
                 deployment.info,
                 deployment.status,
+                deployment.deployment_type,
+                deployment.required_skills,
+                deployment.compatibility_pref,
             ),
             clients: clients,
             crews: crews,
+            recommended_crews: recommended_crews,
             status_options: deployment_service::status_options(),
+            deployment_type_options: deployment_service::deployment_type_options(),
         },
     ))
 }
@@ -2140,21 +2684,30 @@ pub async fn deployment_update(
 
     match deployment_service::update_deployment(db, user.tenant_id, id, form).await {
         Ok(_) => Ok(Redirect::to(uri!(deployments(slug = user.tenant_slug)))),
-        Err(err) => Err(Template::render(
-            "deployments/edit",
-            context! {
-                title: "Edit deployment",
-                current_user: Some(CurrentUserView::from(&user)),
-                current_user_id: user.id,
-                workspace_brand: workspace_brand(db, user.tenant_id).await,
-                error: err.message,
-                deployment_id: id,
-                form: err.form,
-                clients: clients,
-                crews: crews,
-                status_options: deployment_service::status_options(),
-            },
-        )),
+        Err(err) => {
+            let recommended_crews = recommended_crews_view(
+                &crews,
+                &err.form.required_skills,
+                &err.form.compatibility_pref,
+            );
+            Err(Template::render(
+                "deployments/edit",
+                context! {
+                    title: "Edit deployment",
+                    current_user: Some(CurrentUserView::from(&user)),
+                    current_user_id: user.id,
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    error: err.message,
+                    deployment_id: id,
+                    form: err.form,
+                    clients: clients,
+                    crews: crews,
+                    recommended_crews: recommended_crews,
+                    status_options: deployment_service::status_options(),
+                    deployment_type_options: deployment_service::deployment_type_options(),
+                },
+            ))
+        }
     }
 }
 
@@ -2177,6 +2730,31 @@ pub async fn deployment_delete(
         let groups = deployment_service::list_deployments_grouped(db, user.tenant_id)
             .await
             .unwrap_or_default();
+        let deployment_ids = groups
+            .iter()
+            .flat_map(|group| group.deployments.iter().map(|deployment| deployment.id))
+            .collect::<Vec<_>>();
+        let issue_flags = deployment_update_repo::list_issue_flags_for_deployments(
+            db,
+            user.tenant_id,
+            &deployment_ids,
+        )
+        .await
+        .unwrap_or_default();
+        let mut issue_map = HashMap::new();
+        for (deployment_id, issue_count, resolved_count) in issue_flags {
+            issue_map.insert(deployment_id, (issue_count, resolved_count));
+        }
+        let invoice_statuses = invoice_repo::list_invoice_statuses_for_deployments(
+            db,
+            user.tenant_id,
+            &deployment_ids,
+        )
+        .await
+        .unwrap_or_default();
+        let invoice_map = invoice_statuses
+            .into_iter()
+            .collect::<HashMap<i64, String>>();
         let deployments = groups
             .into_iter()
             .map(|group| {
@@ -2189,6 +2767,19 @@ pub async fn deployment_delete(
                             &deployment.end_at,
                             deployment.fee_per_hour,
                         );
+                        let (issue_count, resolved_count) = issue_map
+                            .get(&deployment.id)
+                            .copied()
+                            .unwrap_or((0, 0));
+                        let invoice_status =
+                            invoice_map.get(&deployment.id).map(|status| status.as_str());
+                        let timeline = deployment_service::deployment_timeline(
+                            &deployment.status,
+                            &deployment.deployment_type,
+                            issue_count,
+                            resolved_count,
+                            invoice_status,
+                        );
                         context! {
                             id: deployment.id,
                             crew_id: deployment.crew_id,
@@ -2199,6 +2790,7 @@ pub async fn deployment_delete(
                             calculated_fee: calculated_fee,
                             info: deployment.info,
                             status: deployment.status,
+                            timeline: timeline,
                         }
                     })
                     .collect::<Vec<_>>();

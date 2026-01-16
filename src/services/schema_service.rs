@@ -14,6 +14,8 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
               logo_path TEXT NOT NULL DEFAULT '',
               theme_key TEXT NOT NULL DEFAULT 'kinetic',
               background_hue INTEGER NOT NULL DEFAULT 32,
+              body_font TEXT NOT NULL DEFAULT 'Space Grotesk',
+              heading_font TEXT NOT NULL DEFAULT 'Space Grotesk',
               plan_key TEXT NOT NULL DEFAULT 'free',
               plan_started_at TEXT NOT NULL DEFAULT (datetime('now')),
               plan_expired INTEGER NOT NULL DEFAULT 0,
@@ -78,6 +80,9 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             name TEXT NOT NULL,
             members_count INTEGER NOT NULL DEFAULT 0,
             status TEXT NOT NULL DEFAULT 'Active',
+            gear_score INTEGER NOT NULL DEFAULT 100,
+            skill_tags TEXT NOT NULL DEFAULT '',
+            compatibility_tags TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(tenant_id) REFERENCES tenants(id)
         )
@@ -97,6 +102,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             phone TEXT NOT NULL,
             email TEXT NOT NULL,
             position TEXT NOT NULL,
+            availability_status TEXT NOT NULL DEFAULT 'Available',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(crew_id) REFERENCES crews(id) ON DELETE CASCADE,
             FOREIGN KEY(tenant_id) REFERENCES tenants(id)
@@ -119,6 +125,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             longitude TEXT NOT NULL,
             stage TEXT NOT NULL DEFAULT 'Proposal',
             currency TEXT NOT NULL DEFAULT 'USD',
+            portal_token TEXT NOT NULL DEFAULT '',
             is_deleted INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(tenant_id) REFERENCES tenants(id)
@@ -183,6 +190,9 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             fee_per_hour REAL NOT NULL DEFAULT 0,
             info TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'Scheduled',
+            deployment_type TEXT NOT NULL DEFAULT 'Onsite',
+            required_skills TEXT NOT NULL DEFAULT '',
+            compatibility_pref TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(client_id) REFERENCES clients(id),
             FOREIGN KEY(crew_id) REFERENCES crews(id),
@@ -213,6 +223,11 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             FOREIGN KEY(user_id) REFERENCES users(id)
         )
         "#,
+    )
+    .execute(&db.0)
+    .await?;
+    sqlx::query(
+        "UPDATE appointments SET status = 'Attended' WHERE LOWER(status) IN ('on going', 'ongoing')",
     )
     .execute(&db.0)
     .await?;
@@ -254,6 +269,7 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             html_body TEXT NOT NULL,
             provider TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'Queued',
+            error_message TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             FOREIGN KEY(tenant_id) REFERENCES tenants(id),
             FOREIGN KEY(client_id) REFERENCES clients(id),
@@ -305,6 +321,11 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     );
     ignore_duplicate_column(
         sqlx::query("ALTER TABLE clients ADD COLUMN currency TEXT NOT NULL DEFAULT 'USD'")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE clients ADD COLUMN portal_token TEXT NOT NULL DEFAULT ''")
             .execute(&db.0)
             .await,
     );
@@ -403,11 +424,25 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
               .execute(&db.0)
               .await,
       );
-      ignore_duplicate_column(
-          sqlx::query("ALTER TABLE tenants ADD COLUMN background_hue INTEGER NOT NULL DEFAULT 32")
-              .execute(&db.0)
-              .await,
-      );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE tenants ADD COLUMN background_hue INTEGER NOT NULL DEFAULT 32")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE tenants ADD COLUMN body_font TEXT NOT NULL DEFAULT 'Space Grotesk'",
+        )
+        .execute(&db.0)
+        .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE tenants ADD COLUMN heading_font TEXT NOT NULL DEFAULT 'Space Grotesk'",
+        )
+        .execute(&db.0)
+        .await,
+    );
       ignore_duplicate_column(
           sqlx::query("ALTER TABLE tenants ADD COLUMN plan_key TEXT NOT NULL DEFAULT 'free'")
               .execute(&db.0)
@@ -445,10 +480,53 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
             .execute(&db.0)
             .await,
     );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE crews ADD COLUMN gear_score INTEGER NOT NULL DEFAULT 100",
+        )
+        .execute(&db.0)
+        .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE crew_members ADD COLUMN availability_status TEXT NOT NULL DEFAULT 'Available'",
+        )
+        .execute(&db.0)
+        .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE crews ADD COLUMN skill_tags TEXT NOT NULL DEFAULT ''")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE crews ADD COLUMN compatibility_tags TEXT NOT NULL DEFAULT ''")
+            .execute(&db.0)
+            .await,
+    );
     ensure_deployment_updates_user_id(db).await?;
     ignore_duplicate_column(
         sqlx::query(
             "ALTER TABLE deployment_updates ADD COLUMN is_placeholder INTEGER NOT NULL DEFAULT 0",
+        )
+        .execute(&db.0)
+        .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE deployments ADD COLUMN deployment_type TEXT NOT NULL DEFAULT 'Onsite'",
+        )
+        .execute(&db.0)
+        .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query("ALTER TABLE deployments ADD COLUMN required_skills TEXT NOT NULL DEFAULT ''")
+            .execute(&db.0)
+            .await,
+    );
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE deployments ADD COLUMN compatibility_pref TEXT NOT NULL DEFAULT ''",
         )
         .execute(&db.0)
         .await,
@@ -473,6 +551,13 @@ pub async fn ensure_schema(db: &Db) -> Result<(), sqlx::Error> {
     )
     .execute(&db.0)
     .await?;
+    ignore_duplicate_column(
+        sqlx::query(
+            "ALTER TABLE outbound_emails ADD COLUMN error_message TEXT NOT NULL DEFAULT ''",
+        )
+        .execute(&db.0)
+        .await,
+    );
 
     sqlx::query(
         "UPDATE tenants SET plan_started_at = datetime('now') WHERE plan_started_at = '1970-01-01 00:00:00' OR plan_started_at = ''",
@@ -749,12 +834,12 @@ async fn seed_client_data(db: &Db) -> Result<(), sqlx::Error> {
         let contact_id = contact_ids[(index - 1) % contact_ids.len()];
         let client_id = client_ids[(index - 1) % client_ids.len()];
         let scheduled_for = format!("2026-01-{:02} 09:{:02}", (index - 1) % 28 + 1, index % 60);
-        let status = if index % 3 == 0 {
-            "On Going"
-        } else if index % 5 == 0 {
-            "Cancelled"
-        } else {
-            "Scheduled"
+        let status = match index % 5 {
+            0 => "No-Show",
+            1 => "Scheduled",
+            2 => "Confirmed",
+            3 => "Attended",
+            _ => "Cancelled",
         };
         sqlx::query(
             r#"

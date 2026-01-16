@@ -8,6 +8,7 @@ mod services;
 
 use rocket::fairing::AdHoc;
 use rocket::fs::{relative, FileServer};
+use rocket::tokio::time::{interval, Duration};
 use rocket_db_pools::{sqlx, Database};
 use rocket_dyn_templates::Template;
 
@@ -82,6 +83,8 @@ use controllers::client_controller::{
     contact_update,
 };
 use controllers::public_controller::{
+    client_portal,
+    client_portal_mark_complete,
     dashboard,
     deployment_delete,
     deployment_edit_form,
@@ -101,6 +104,7 @@ use controllers::public_controller::{
     settings_email_update,
     settings_theme_update,
     settings_seed_demo,
+    email_log,
     tracking,
     tracking_timer_start,
     tracking_timer_stop,
@@ -111,9 +115,9 @@ use controllers::public_controller::{
     workspace_register_form,
     workspace_register_submit,
 };
-use services::schema_service;
+use services::{email_service, schema_service};
 
-#[derive(Database)]
+#[derive(Database, Clone)]
 #[database("kinetic_db")]
 pub struct Db(sqlx::SqlitePool);
 
@@ -130,6 +134,18 @@ fn rocket() -> _ {
             }
             Ok(rocket)
         }))
+        .attach(AdHoc::on_liftoff("Email Worker", |rocket| Box::pin(async move {
+            let db = Db::fetch(rocket).expect("database pool").clone();
+            rocket::tokio::spawn(async move {
+                let mut ticker = interval(Duration::from_secs(15));
+                loop {
+                    ticker.tick().await;
+                    if let Err(err) = email_service::process_outbound_queue(&db).await {
+                        eprintln!("Email worker error: {err}");
+                    }
+                }
+            });
+        })))
         .mount(
             "/",
             routes![
@@ -139,6 +155,8 @@ fn rocket() -> _ {
                 login_form,
                 login_submit,
                 logout,
+                client_portal,
+                client_portal_mark_complete,
                 admin_login_form,
                 admin_login_submit,
                 admin_logout,
@@ -215,6 +233,7 @@ fn rocket() -> _ {
                 settings_email_update,
                 settings_theme_update,
                 settings_seed_demo,
+                email_log,
                 deployment_new_form,
                 deployment_create,
                 deployment_edit_form,

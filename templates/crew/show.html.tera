@@ -35,6 +35,18 @@
           <div class="text-muted text-uppercase small">Members</div>
           <div class="fw-semibold">{{ members_count }}</div>
         </div>
+        <div class="col-md-6">
+          <div class="text-muted text-uppercase small">Skill tags</div>
+          <div class="fw-semibold">
+            {% if crew.skill_tags == "" %}None{% else %}{{ crew.skill_tags }}{% endif %}
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="text-muted text-uppercase small">Compatibility</div>
+          <div class="fw-semibold">
+            {% if crew.compatibility_tags == "" %}None{% else %}{{ crew.compatibility_tags }}{% endif %}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -66,9 +78,15 @@
                 <td>{{ member.email }}</td>
                 <td>{{ member.phone }}</td>
                 <td class="text-end">
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/{{ member.id }}/edit">Edit</a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/{{ member.id }}/edit" title="Edit" aria-label="Edit">
+                    <i class="bi bi-pencil"></i>
+                    <span class="visually-hidden">Edit</span>
+                  </a>
                   <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/members/{{ member.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                      <i class="bi bi-trash"></i>
+                      <span class="visually-hidden">Delete</span>
+                    </button>
                   </form>
                 </td>
               </tr>

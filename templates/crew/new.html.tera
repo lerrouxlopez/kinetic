@@ -29,6 +29,21 @@
                 {% endfor %}
               </select>
             </div>
+            <div class="mb-4">
+              <label class="form-label">Gear readiness score</label>
+              <input class="form-control" type="number" name="gear_score" value="{{ form.gear_score }}" min="0" max="100" required>
+              <div class="form-text">Score from 0-100 based on the latest gear/asset check.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Skill tags</label>
+              <input class="form-control" name="skill_tags" value="{{ form.skill_tags }}" placeholder="electrical, safety, audit">
+              <div class="form-text">Comma-separated specialties the crew is strong at.</div>
+            </div>
+            <div class="mb-4">
+              <label class="form-label">Compatibility tags</label>
+              <input class="form-control" name="compatibility_tags" value="{{ form.compatibility_tags }}" placeholder="healthcare, retail, vip">
+              <div class="form-text">Client segments or workstyles the crew excels with.</div>
+            </div>
             <button class="btn btn-primary w-100" type="submit">Create crew</button>
           </form>
         </div>

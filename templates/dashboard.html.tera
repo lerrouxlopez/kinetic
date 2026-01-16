@@ -45,7 +45,7 @@
             {% if can_view_crew %}
               <a class="nav-link" href="/{{ tenant_slug }}/crew">
                 <i class="bi bi-people"></i>
-                Roster
+                Teams
               </a>
             {% endif %}
             {% if can_view_deployments %}
@@ -290,12 +290,113 @@
                   <div class="stat-tile">
                     <div class="stat-label">Outbound emails</div>
                     <div class="stat-value">{{ email_total }}</div>
-                    <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/settings">Review email log</a>
+                    <a class="link-underline link-underline-opacity-0 text-muted small" href="/{{ tenant_slug }}/email-log">Review email log</a>
                   </div>
                 </div>
               {% endif %}
             </div>
           </div>
+          <div class="card glass-card p-4 mt-3">
+            <h2 class="h4 fw-bold">What changed today</h2>
+            <p class="text-muted">Daily operational deltas and alerts.</p>
+            <div class="row g-3 mt-2">
+              <div class="col-md-4">
+                <div class="stat-tile">
+                  <div class="stat-label">New deployments</div>
+                  <div class="stat-value">{{ new_deployments_today }}</div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="stat-tile">
+                  <div class="stat-label">Overdue tracking</div>
+                  <div class="stat-value">{{ overdue_updates | length }}</div>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="stat-tile">
+                  <div class="stat-label">Idle crews</div>
+                  <div class="stat-value">{{ idle_crews | length }}</div>
+                </div>
+              </div>
+            </div>
+            <div class="row g-3 mt-2">
+              <div class="col-lg-6">
+                <div class="card glass-card p-3 h-100">
+                  <div class="stat-label mb-2">Overdue tracking updates</div>
+                  {% if overdue_updates | length == 0 %}
+                    <div class="text-muted small">All active deployments are current.</div>
+                  {% else %}
+                    <div class="d-flex flex-column gap-2">
+                      {% for item in overdue_updates %}
+                        <div class="d-flex align-items-center justify-content-between">
+                          <div>
+                            <div class="fw-semibold">{{ item.client_name }}</div>
+                            <div class="text-muted small">{{ item.crew_name }}</div>
+                          </div>
+                          <div class="text-muted small">
+                            {% if item.last_update_at %}
+                              Last update {{ item.last_update_at }}
+                            {% else %}
+                              No updates yet
+                            {% endif %}
+                          </div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+              <div class="col-lg-6">
+                <div class="card glass-card p-3 h-100">
+                  <div class="stat-label mb-2">Idle crew alerts</div>
+                  {% if idle_crews | length == 0 %}
+                    <div class="text-muted small">No idle crews right now.</div>
+                  {% else %}
+                    <div class="d-flex flex-column gap-2">
+                      {% for crew in idle_crews %}
+                        <div class="d-flex align-items-center justify-content-between">
+                          <div class="fw-semibold">{{ crew.name }}</div>
+                          <span class="text-muted small">Idle</span>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+          {% if outcome_kpis is defined and outcome_kpis %}
+            <div class="card glass-card p-4 mt-3">
+              <h2 class="h4 fw-bold">Outcome KPIs</h2>
+              <p class="text-muted">Operational quality and client-ready performance.</p>
+              <div class="row g-3 mt-2">
+                <div class="col-md-3">
+                  <div class="stat-tile">
+                    <div class="stat-label">Time to client-ready</div>
+                    <div class="stat-value">{{ outcome_kpis.avg_hours_to_ready | round }}h</div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="stat-tile">
+                    <div class="stat-label">First-time fix</div>
+                    <div class="stat-value">{{ outcome_kpis.first_time_fix }}%</div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="stat-tile">
+                    <div class="stat-label">Rework rate</div>
+                    <div class="stat-value">{{ outcome_kpis.rework_rate }}%</div>
+                  </div>
+                </div>
+                <div class="col-md-3">
+                  <div class="stat-tile">
+                    <div class="stat-label">Utilization vs quality</div>
+                    <div class="stat-value">{{ outcome_kpis.utilization }}% / {{ outcome_kpis.quality }}%</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% endif %}
           <div class="row g-4 mt-1">
             <div class="col-lg-7">
               <div class="card glass-card p-4 h-100">
@@ -422,4 +523,3 @@
     </div>
   </div>
 {% endblock content %}
-

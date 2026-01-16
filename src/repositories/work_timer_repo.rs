@@ -108,3 +108,32 @@ pub async fn list_stale_timers(
         })
         .collect())
 }
+
+pub async fn list_active_timers(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<Vec<WorkTimer>, sqlx::Error> {
+    let rows = sqlx::query(
+        r#"
+        SELECT id, tenant_id, deployment_id, user_id, start_at, end_at
+        FROM work_timers
+        WHERE tenant_id = ? AND end_at IS NULL
+        ORDER BY start_at DESC, id DESC
+        "#,
+    )
+    .bind(tenant_id)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| WorkTimer {
+            id: row.get("id"),
+            tenant_id: row.get("tenant_id"),
+            deployment_id: row.get("deployment_id"),
+            user_id: row.get("user_id"),
+            start_at: row.get("start_at"),
+            end_at: row.get("end_at"),
+        })
+        .collect())
+}

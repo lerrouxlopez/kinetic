@@ -320,3 +320,31 @@ pub async fn count_invoices_by_status_all(
         .map(|row| (row.get("status"), row.get("count")))
         .collect())
 }
+
+pub async fn list_invoice_statuses_for_deployments(
+    db: &Db,
+    tenant_id: i64,
+    deployment_ids: &[i64],
+) -> Result<Vec<(i64, String)>, sqlx::Error> {
+    if deployment_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = deployment_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        "SELECT deployment_id, status FROM invoices WHERE tenant_id = ? AND deployment_id IN ({})",
+        placeholders
+    );
+    let mut query = sqlx::query(&sql).bind(tenant_id);
+    for deployment_id in deployment_ids {
+        query = query.bind(deployment_id);
+    }
+    let rows = query.fetch_all(&db.0).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("deployment_id"), row.get("status")))
+        .collect())
+}

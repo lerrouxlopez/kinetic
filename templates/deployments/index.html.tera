@@ -44,7 +44,7 @@
                 <th>Start</th>
                 <th>Finish</th>
                 <th>Fee</th>
-                <th>Status</th>
+                <th>Timeline</th>
                 <th>Info</th>
                 <th class="text-end">Actions</th>
               </tr>
@@ -56,12 +56,27 @@
                   <td>{{ deployment.start_at }}</td>
                   <td>{{ deployment.end_at }}</td>
                   <td>{{ deployment.calculated_fee }} {{ group.client_currency }}</td>
-                  <td><span class="badge crew-badge">{{ deployment.status }}</span></td>
+                  <td>
+                    <div class="deployment-timeline">
+                      {% for step in deployment.timeline %}
+                        <div class="deployment-timeline-step is-{{ step.state }}">
+                          <div class="deployment-timeline-label">{{ step.label }}</div>
+                          <div class="deployment-timeline-note">{{ step.note }}</div>
+                        </div>
+                      {% endfor %}
+                    </div>
+                  </td>
                   <td>{{ deployment.info }}</td>
                   <td class="text-end">
-                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/deployments/{{ deployment.id }}/edit">Edit</a>
+                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/deployments/{{ deployment.id }}/edit" title="Edit" aria-label="Edit">
+                      <i class="bi bi-pencil"></i>
+                      <span class="visually-hidden">Edit</span>
+                    </a>
                     <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/deployments/{{ deployment.id }}/delete">
-                      <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                      <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                        <i class="bi bi-trash"></i>
+                        <span class="visually-hidden">Delete</span>
+                      </button>
                     </form>
                   </td>
                 </tr>

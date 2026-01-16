@@ -43,6 +43,14 @@
               <label class="form-label">Position</label>
               <input class="form-control" name="position" value="{{ form.position }}" required>
             </div>
+            <div class="mb-3">
+              <label class="form-label">Availability</label>
+              <select class="form-select" name="availability_status" required>
+                {% for option in availability_options %}
+                  <option value="{{ option }}" {% if form.availability_status == option %}selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+              </select>
+            </div>
             <button class="btn btn-primary w-100 mt-4" type="submit">Create member</button>
           </form>
         </div>

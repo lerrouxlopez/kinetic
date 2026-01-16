@@ -122,6 +122,7 @@ pub async fn crew_index(
     let crews = crew_service::list_crews_paged(db, tenant_id, PER_PAGE as i64, offset)
         .await
         .unwrap_or_default();
+    let roster = crew_service::roster_views(db, tenant_id, crews).await;
     let total_crews = crew_service::count_crews(db, tenant_id).await.unwrap_or(0);
     let pagination = pagination_view(page, total_crews, |target_page| {
         format!("/{}/crew?page={}", current_user.tenant_slug, target_page)
@@ -133,7 +134,7 @@ pub async fn crew_index(
             title: "Crew roster",
             current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-            crews: crews,
+            crews: roster,
             stats: stats,
             crew_limit_reached: crew_limit_reached,
             crew_limit: crew_limit,
@@ -174,14 +175,14 @@ pub async fn crew_show(
         _ => {
             return Ok(Template::render(
                 "crew/index",
-                context! {
-                    title: "Crew roster",
-                    current_user: Some(current_user),
+            context! {
+                title: "Crew roster",
+                current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
-                    stats: crew_service::stats_from_crews(&[]),
-                    error: "Crew not found.".to_string(),
-                    crew_limit_reached: false,
+                crews: Vec::<crate::models::CrewRosterView>::new(),
+                stats: crew_service::stats_from_crews(&[]),
+                error: "Crew not found.".to_string(),
+                crew_limit_reached: false,
                 },
             ))
         }
@@ -250,7 +251,7 @@ pub async fn crew_new_form(
             current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
-            form: CrewFormView::new("", "Active"),
+            form: CrewFormView::new("", "Active", 100, "", ""),
             status_options: crew_service::status_options(),
         },
     ))
@@ -329,13 +330,13 @@ pub async fn crew_edit_form(
             return Ok(Template::render(
                 "crew/index",
                 context! {
-                    title: "Crew roster",
-                    current_user: Some(current_user),
+            title: "Crew roster",
+            current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
-                    stats: crew_service::stats_from_crews(&[]),
-                    error: "Crew not found.".to_string(),
-                    crew_limit_reached: false,
+            crews: Vec::<crate::models::CrewRosterView>::new(),
+            stats: crew_service::stats_from_crews(&[]),
+            error: "Crew not found.".to_string(),
+            crew_limit_reached: false,
                 },
             ))
         }
@@ -349,7 +350,13 @@ pub async fn crew_edit_form(
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             crew_id: crew.id,
-            form: CrewFormView::new(crew.name, crew.status),
+            form: CrewFormView::new(
+                crew.name,
+                crew.status,
+                crew.gear_score,
+                crew.skill_tags,
+                crew.compatibility_tags,
+            ),
             status_options: crew_service::status_options(),
         },
     ))
@@ -390,7 +397,7 @@ pub async fn crew_member_new_form(
                     title: "Crew roster",
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
+                    crews: Vec::<crate::models::CrewRosterView>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
                     crew_limit_reached: false,
@@ -410,8 +417,9 @@ pub async fn crew_member_new_form(
             workspace_brand: workspace_brand(db, user.tenant_id).await,
             error: Option::<String>::None,
             crew: crew,
-            form: CrewMemberFormView::new(0, "", "", ""),
+            form: CrewMemberFormView::new(0, "", "", "", "Available"),
             users: users,
+            availability_options: crew_service::availability_options(),
         },
     ))
 }
@@ -450,13 +458,13 @@ pub async fn crew_member_create(
             return Err(Template::render(
                 "crew/index",
                 context! {
-                    title: "Crew roster",
-                    current_user: Some(current_user),
+                title: "Crew roster",
+                current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
-                    stats: crew_service::stats_from_crews(&[]),
-                    error: "Crew not found.".to_string(),
-                    crew_limit_reached: false,
+                crews: Vec::<crate::models::CrewRosterView>::new(),
+                stats: crew_service::stats_from_crews(&[]),
+                error: "Crew not found.".to_string(),
+                crew_limit_reached: false,
                 },
             ))
         }
@@ -474,15 +482,16 @@ pub async fn crew_member_create(
         Err(err) => Err(Template::render(
             "crew/member_new",
             context! {
-                title: "New member",
-                current_user: Some(current_user),
+            title: "New member",
+            current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                error: err.message,
-                crew: crew,
-                form: err.form,
-                users: users,
-            },
-        )),
+            error: err.message,
+            crew: crew,
+            form: err.form,
+            users: users,
+            availability_options: crew_service::availability_options(),
+        },
+    )),
     }
 }
 
@@ -523,7 +532,7 @@ pub async fn crew_member_edit_form(
                     title: "Crew roster",
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
+                    crews: Vec::<crate::models::CrewRosterView>::new(),
                     stats: crew_service::stats_from_crews(&[]),
                     error: "Crew not found.".to_string(),
                     crew_limit_reached: false,
@@ -581,8 +590,10 @@ pub async fn crew_member_edit_form(
                 member.name,
                 member.phone,
                 member.position,
+                member.availability_status,
             ),
             users: users,
+            availability_options: crew_service::availability_options(),
         },
     ))
 }
@@ -622,13 +633,13 @@ pub async fn crew_member_update(
             return Err(Template::render(
                 "crew/index",
                 context! {
-                    title: "Crew roster",
-                    current_user: Some(current_user),
+                title: "Crew roster",
+                current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
-                    stats: crew_service::stats_from_crews(&[]),
-                    error: "Crew not found.".to_string(),
-                    crew_limit_reached: false,
+                crews: Vec::<crate::models::CrewRosterView>::new(),
+                stats: crew_service::stats_from_crews(&[]),
+                error: "Crew not found.".to_string(),
+                crew_limit_reached: false,
                 },
             ))
         }
@@ -646,16 +657,17 @@ pub async fn crew_member_update(
         Err(err) => Err(Template::render(
             "crew/member_edit",
             context! {
-                title: "Edit member",
-                current_user: Some(current_user),
+            title: "Edit member",
+            current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                crew: crew,
-                error: err.message,
-                member_id: member_id,
-                form: err.form,
-                users: users,
-            },
-        )),
+            crew: crew,
+            error: err.message,
+            member_id: member_id,
+            form: err.form,
+            users: users,
+            availability_options: crew_service::availability_options(),
+        },
+    )),
     }
 }
 
@@ -693,13 +705,13 @@ pub async fn crew_member_delete(
             return Err(Template::render(
                 "crew/index",
                 context! {
-                    title: "Crew roster",
-                    current_user: Some(current_user),
+                title: "Crew roster",
+                current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                    crews: Vec::<crate::models::Crew>::new(),
-                    stats: crew_service::stats_from_crews(&[]),
-                    error: "Crew not found.".to_string(),
-                    crew_limit_reached: false,
+                crews: Vec::<crate::models::CrewRosterView>::new(),
+                stats: crew_service::stats_from_crews(&[]),
+                error: "Crew not found.".to_string(),
+                crew_limit_reached: false,
                 },
             ))
         }
@@ -807,14 +819,14 @@ pub async fn crew_delete(
         return Err(Template::render(
             "crew/index",
             context! {
-                title: "Crew roster",
-                current_user: Some(current_user),
+            title: "Crew roster",
+            current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
-                crews: Vec::<crate::models::Crew>::new(),
-                stats: crew_service::stats_from_crews(&[]),
-                error: message,
-                crew_limit_reached: false,
-            },
+            crews: Vec::<crate::models::CrewRosterView>::new(),
+            stats: crew_service::stats_from_crews(&[]),
+            error: message,
+            crew_limit_reached: false,
+        },
         ));
     }
 

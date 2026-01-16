@@ -30,6 +30,34 @@
       </div>
     </div>
 
+    <div class="card glass-card p-3 mb-4">
+      <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-3">
+        <div>
+          <div class="stat-label">Client portal</div>
+          <p class="text-muted mb-0">Share this read-only link for live progress, crew assignment, and delivery windows.</p>
+        </div>
+        <div class="flex-grow-1 w-100">
+          <input class="form-control" type="text" value="{{ portal_url }}" readonly>
+        </div>
+        <a class="btn btn-outline-light" href="{{ portal_url }}" target="_blank" rel="noopener">Open portal</a>
+      </div>
+    </div>
+
+    <div class="card glass-card p-3 mb-4">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <div class="stat-label">Client location</div>
+          <p class="text-muted mb-0">Pinned from the saved client coordinates.</p>
+        </div>
+      </div>
+      <div
+        id="client-map"
+        class="coverage-map"
+        data-lat="{{ client.latitude }}"
+        data-lng="{{ client.longitude }}"
+      ></div>
+    </div>
+
     {% if error %}
       <div class="alert alert-danger">{{ error }}</div>
     {% endif %}
@@ -94,10 +122,19 @@
                   {% else %}
                     <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/appointments/new">Add appointment</a>
                   {% endif %}
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/email">Email</a>
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/edit">Edit</a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/email" title="Email" aria-label="Email">
+                    <i class="bi bi-envelope"></i>
+                    <span class="visually-hidden">Email</span>
+                  </a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/edit" title="Edit" aria-label="Edit">
+                    <i class="bi bi-pencil"></i>
+                    <span class="visually-hidden">Edit</span>
+                  </a>
                   <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                      <i class="bi bi-trash"></i>
+                      <span class="visually-hidden">Delete</span>
+                    </button>
                   </form>
                 </td>
               </tr>
@@ -150,9 +187,15 @@
                 <td><span class="badge crew-badge">{{ appointment.status }}</span></td>
                 <td class="text-muted">{{ appointment.notes }}</td>
                 <td class="text-end">
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/edit">Edit</a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/edit" title="Edit" aria-label="Edit">
+                    <i class="bi bi-pencil"></i>
+                    <span class="visually-hidden">Edit</span>
+                  </a>
                   <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                      <i class="bi bi-trash"></i>
+                      <span class="visually-hidden">Delete</span>
+                    </button>
                   </form>
                 </td>
               </tr>
@@ -181,4 +224,26 @@
       </div>
     {% endif %}
   </div>
+
+  <script>
+    (function () {
+      var mapEl = document.getElementById("client-map");
+      if (!mapEl || typeof L === "undefined") {
+        return;
+      }
+      var lat = parseFloat(mapEl.dataset.lat || "");
+      var lng = parseFloat(mapEl.dataset.lng || "");
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        mapEl.innerHTML = "<div class='text-muted small p-3'>Location unavailable.</div>";
+        return;
+      }
+      var map = L.map(mapEl, { zoomControl: true, attributionControl: true })
+        .setView([lat, lng], 13);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "&copy; OpenStreetMap contributors"
+      }).addTo(map);
+      L.marker([lat, lng]).addTo(map);
+    })();
+  </script>
 {% endblock content %}

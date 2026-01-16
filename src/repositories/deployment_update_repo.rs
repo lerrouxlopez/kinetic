@@ -605,3 +605,298 @@ pub async fn count_updates_missing_user_id(
         Err(err) => Err(err),
     }
 }
+
+pub async fn average_hours_to_first_update(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<f64, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT AVG((julianday(first_update) - julianday(d.start_at)) * 24.0) as avg_hours
+        FROM deployments d
+        JOIN (
+            SELECT deployment_id,
+                   MIN(work_date || ' ' || start_time) as first_update
+            FROM deployment_updates
+            WHERE tenant_id = ? AND is_placeholder = 0
+            GROUP BY deployment_id
+        ) u ON u.deployment_id = d.id
+        WHERE d.tenant_id = ?
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(tenant_id)
+    .fetch_one(&db.0)
+    .await?;
+    Ok(row.get::<Option<f64>, _>("avg_hours").unwrap_or(0.0))
+}
+
+pub async fn count_completed_deployments(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        "SELECT COUNT(*) as count FROM deployments WHERE tenant_id = ? AND status = 'Completed'",
+    )
+    .bind(tenant_id)
+    .fetch_one(&db.0)
+    .await?;
+    Ok(row.get("count"))
+}
+
+pub async fn count_completed_with_issue_keywords(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT COUNT(*) as count
+        FROM deployments d
+        WHERE d.tenant_id = ? AND d.status = 'Completed'
+          AND EXISTS (
+              SELECT 1
+              FROM deployment_updates u
+              WHERE u.deployment_id = d.id
+                AND u.tenant_id = d.tenant_id
+                AND u.is_placeholder = 0
+                AND (
+                    lower(u.notes) LIKE '%issue%'
+                    OR lower(u.notes) LIKE '%problem%'
+                    OR lower(u.notes) LIKE '%blocked%'
+                    OR lower(u.notes) LIKE '%delay%'
+                    OR lower(u.notes) LIKE '%incident%'
+                )
+          )
+        "#,
+    )
+    .bind(tenant_id)
+    .fetch_one(&db.0)
+    .await?;
+    Ok(row.get("count"))
+}
+
+pub async fn count_completed_with_rework_keywords(
+    db: &Db,
+    tenant_id: i64,
+) -> Result<i64, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT COUNT(*) as count
+        FROM deployments d
+        WHERE d.tenant_id = ? AND d.status = 'Completed'
+          AND EXISTS (
+              SELECT 1
+              FROM deployment_updates u
+              WHERE u.deployment_id = d.id
+                AND u.tenant_id = d.tenant_id
+                AND u.is_placeholder = 0
+                AND (
+                    lower(u.notes) LIKE '%rework%'
+                    OR lower(u.notes) LIKE '%redo%'
+                    OR lower(u.notes) LIKE '%revisit%'
+                )
+          )
+        "#,
+    )
+    .bind(tenant_id)
+    .fetch_one(&db.0)
+    .await?;
+    Ok(row.get("count"))
+}
+
+pub async fn list_issue_flags_for_deployments(
+    db: &Db,
+    tenant_id: i64,
+    deployment_ids: &[i64],
+) -> Result<Vec<(i64, i64, i64)>, sqlx::Error> {
+    if deployment_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = deployment_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        r#"
+        SELECT deployment_id,
+               SUM(CASE
+                       WHEN lower(notes) LIKE '%issue%'
+                         OR lower(notes) LIKE '%problem%'
+                         OR lower(notes) LIKE '%blocked%'
+                         OR lower(notes) LIKE '%delay%'
+                         OR lower(notes) LIKE '%incident%'
+                       THEN 1 ELSE 0 END) as issue_count,
+               SUM(CASE
+                       WHEN lower(notes) LIKE '%resolv%'
+                         OR lower(notes) LIKE '%fix%'
+                         OR lower(notes) LIKE '%clear%'
+                       THEN 1 ELSE 0 END) as resolved_count
+        FROM deployment_updates
+        WHERE tenant_id = ? AND deployment_id IN ({}) AND is_placeholder = 0
+        GROUP BY deployment_id
+        "#,
+        placeholders
+    );
+    let mut query = sqlx::query(&sql).bind(tenant_id);
+    for deployment_id in deployment_ids {
+        query = query.bind(deployment_id);
+    }
+    let rows = query.fetch_all(&db.0).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get("deployment_id"),
+                row.get("issue_count"),
+                row.get("resolved_count"),
+            )
+        })
+        .collect())
+}
+
+#[derive(serde::Serialize)]
+pub struct OverdueDeploymentRow {
+    pub deployment_id: i64,
+    pub client_name: String,
+    pub crew_name: String,
+    pub last_update_at: Option<String>,
+}
+
+pub async fn list_overdue_active_deployments(
+    db: &Db,
+    tenant_id: i64,
+    hours: i64,
+) -> Result<Vec<OverdueDeploymentRow>, sqlx::Error> {
+    let row_cutoff = format!("-{} hours", hours.max(1));
+    let rows = sqlx::query(
+        r#"
+        SELECT d.id as deployment_id,
+               c.company_name as client_name,
+               cr.name as crew_name,
+               MAX(u.work_date || ' ' || u.start_time) as last_update_at
+        FROM deployments d
+        JOIN clients c ON d.client_id = c.id
+        JOIN crews cr ON d.crew_id = cr.id
+        LEFT JOIN deployment_updates u
+          ON u.deployment_id = d.id AND u.tenant_id = d.tenant_id AND u.is_placeholder = 0
+        WHERE d.tenant_id = ? AND d.status = 'Active'
+        GROUP BY d.id
+        HAVING last_update_at IS NULL
+           OR datetime(last_update_at) < datetime('now', ?)
+        ORDER BY d.id DESC
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(row_cutoff)
+    .fetch_all(&db.0)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|row| OverdueDeploymentRow {
+            deployment_id: row.get("deployment_id"),
+            client_name: row.get("client_name"),
+            crew_name: row.get("crew_name"),
+            last_update_at: row.get("last_update_at"),
+        })
+        .collect())
+}
+
+pub async fn count_updates_for_deployments(
+    db: &Db,
+    tenant_id: i64,
+    deployment_ids: &[i64],
+) -> Result<Vec<(i64, i64)>, sqlx::Error> {
+    if deployment_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = deployment_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        r#"
+        SELECT deployment_id, COUNT(*) as update_count
+        FROM deployment_updates
+        WHERE tenant_id = ? AND deployment_id IN ({}) AND is_placeholder = 0
+        GROUP BY deployment_id
+        "#,
+        placeholders
+    );
+    let mut query = sqlx::query(&sql).bind(tenant_id);
+    for deployment_id in deployment_ids {
+        query = query.bind(deployment_id);
+    }
+    let rows = query.fetch_all(&db.0).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("deployment_id"), row.get("update_count")))
+        .collect())
+}
+
+pub async fn list_latest_updates_for_deployments(
+    db: &Db,
+    tenant_id: i64,
+    deployment_ids: &[i64],
+) -> Result<Vec<(i64, String, String, String)>, sqlx::Error> {
+    if deployment_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = deployment_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let latest_sql = format!(
+        r#"
+        SELECT deployment_id, MAX(id) as latest_id
+        FROM deployment_updates
+        WHERE tenant_id = ? AND deployment_id IN ({}) AND is_placeholder = 0
+        GROUP BY deployment_id
+        "#,
+        placeholders
+    );
+    let mut latest_query = sqlx::query(&latest_sql).bind(tenant_id);
+    for deployment_id in deployment_ids {
+        latest_query = latest_query.bind(deployment_id);
+    }
+    let latest_rows = latest_query.fetch_all(&db.0).await?;
+    if latest_rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let latest_ids = latest_rows
+        .iter()
+        .map(|row| row.get::<i64, _>("latest_id"))
+        .collect::<Vec<_>>();
+    let id_placeholders = latest_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let details_sql = format!(
+        r#"
+        SELECT id, deployment_id, work_date, start_time, notes
+        FROM deployment_updates
+        WHERE tenant_id = ? AND id IN ({})
+        "#,
+        id_placeholders
+    );
+    let mut details_query = sqlx::query(&details_sql).bind(tenant_id);
+    for update_id in latest_ids {
+        details_query = details_query.bind(update_id);
+    }
+    let rows = details_query.fetch_all(&db.0).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get("deployment_id"),
+                row.get("work_date"),
+                row.get("start_time"),
+                row.get("notes"),
+            )
+        })
+        .collect())
+}

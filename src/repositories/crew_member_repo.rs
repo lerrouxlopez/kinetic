@@ -10,7 +10,7 @@ pub async fn list_members(
 ) -> Result<Vec<CrewMember>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position
+        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position, availability_status
         FROM crew_members
         WHERE crew_id = ? AND tenant_id = ?
         ORDER BY id DESC
@@ -32,6 +32,7 @@ pub async fn list_members(
             phone: row.get("phone"),
             email: row.get("email"),
             position: row.get("position"),
+            availability_status: row.get("availability_status"),
         })
         .collect())
 }
@@ -45,7 +46,7 @@ pub async fn list_members_paged(
 ) -> Result<Vec<CrewMember>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position
+        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position, availability_status
         FROM crew_members
         WHERE crew_id = ? AND tenant_id = ?
         ORDER BY id DESC
@@ -70,6 +71,7 @@ pub async fn list_members_paged(
             phone: row.get("phone"),
             email: row.get("email"),
             position: row.get("position"),
+            availability_status: row.get("availability_status"),
         })
         .collect())
 }
@@ -97,7 +99,7 @@ pub async fn find_member_by_id(
 ) -> Result<Option<CrewMember>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position
+        SELECT id, crew_id, tenant_id, user_id, name, phone, email, position, availability_status
         FROM crew_members
         WHERE id = ? AND crew_id = ? AND tenant_id = ?
         "#,
@@ -117,6 +119,7 @@ pub async fn find_member_by_id(
         phone: row.get("phone"),
         email: row.get("email"),
         position: row.get("position"),
+        availability_status: row.get("availability_status"),
     }))
 }
 
@@ -129,11 +132,12 @@ pub async fn create_member(
     phone: &str,
     email: &str,
     position: &str,
+    availability_status: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO crew_members (crew_id, tenant_id, user_id, name, phone, email, position)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO crew_members (crew_id, tenant_id, user_id, name, phone, email, position, availability_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(crew_id)
@@ -143,6 +147,7 @@ pub async fn create_member(
     .bind(phone)
     .bind(email)
     .bind(position)
+    .bind(availability_status)
     .execute(&db.0)
     .await?;
     Ok(())
@@ -158,11 +163,12 @@ pub async fn update_member(
     phone: &str,
     email: &str,
     position: &str,
+    availability_status: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
         UPDATE crew_members
-        SET user_id = ?, name = ?, phone = ?, email = ?, position = ?
+        SET user_id = ?, name = ?, phone = ?, email = ?, position = ?, availability_status = ?
         WHERE id = ? AND crew_id = ? AND tenant_id = ?
         "#,
     )
@@ -171,6 +177,7 @@ pub async fn update_member(
     .bind(phone)
     .bind(email)
     .bind(position)
+    .bind(availability_status)
     .bind(member_id)
     .bind(crew_id)
     .bind(tenant_id)
@@ -217,4 +224,37 @@ pub async fn delete_member(
     .execute(&db.0)
     .await?;
     Ok(())
+}
+
+pub async fn count_availability_by_crew(
+    db: &Db,
+    tenant_id: i64,
+    crew_ids: &[i64],
+) -> Result<Vec<(i64, String, i64)>, sqlx::Error> {
+    if crew_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let placeholders = crew_ids
+        .iter()
+        .map(|_| "?")
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
+        r#"
+        SELECT crew_id, availability_status, COUNT(*) as count
+        FROM crew_members
+        WHERE tenant_id = ? AND crew_id IN ({})
+        GROUP BY crew_id, availability_status
+        "#,
+        placeholders
+    );
+    let mut query = sqlx::query(&sql).bind(tenant_id);
+    for crew_id in crew_ids {
+        query = query.bind(crew_id);
+    }
+    let rows = query.fetch_all(&db.0).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| (row.get("crew_id"), row.get("availability_status"), row.get("count")))
+        .collect())
 }

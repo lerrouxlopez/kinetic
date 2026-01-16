@@ -11,11 +11,19 @@ pub struct AppointmentError {
 }
 
 const STATUS_SCHEDULED: &str = "Scheduled";
-const STATUS_ONGOING: &str = "On Going";
+const STATUS_CONFIRMED: &str = "Confirmed";
+const STATUS_ATTENDED: &str = "Attended";
 const STATUS_CANCELLED: &str = "Cancelled";
+const STATUS_NO_SHOW: &str = "No-Show";
 
-pub fn status_options() -> [&'static str; 3] {
-    [STATUS_SCHEDULED, STATUS_ONGOING, STATUS_CANCELLED]
+pub fn status_options() -> [&'static str; 5] {
+    [
+        STATUS_SCHEDULED,
+        STATUS_CONFIRMED,
+        STATUS_ATTENDED,
+        STATUS_CANCELLED,
+        STATUS_NO_SHOW,
+    ]
 }
 
 pub async fn list_appointments(

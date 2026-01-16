@@ -17,11 +17,6 @@ The first registration creates a workspace (tenant). Login is scoped by workspac
 
 ## Super admin
 
-On first boot, a super admin is seeded if none exists.
-
-- Default email: `admin@kinetic.local`
-- Default password: `ChangeMe123!`
-
 Override with environment variables before running:
 
 ```bash
@@ -40,6 +35,70 @@ When moving to MySQL:
 
 1. Update `Rocket.toml` to `mysql://user:pass@host/db`.
 2. Replace the SQLite schema setup with migrations or MySQL-specific DDL.
+
+## Deployment (RunCloud + GHCR)
+
+This repo includes a Dockerfile and a GitHub Actions workflow that builds and
+pushes `ghcr.io/<owner>/kinetic:latest` on each push to `master`, then SSHes into
+your server to pull and restart the container.
+
+### Server setup
+
+Create `/opt/kinetic/docker-compose.yml` on the VPS:
+
+```yaml
+services:
+  app:
+    image: ghcr.io/<owner>/kinetic:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      ROCKET_ADDRESS: 0.0.0.0
+      ROCKET_PORT: 8000
+      KINETIC_ADMIN_EMAIL: you@example.com
+      KINETIC_ADMIN_PASSWORD: strong-password
+    volumes:
+      - /opt/kinetic/data/kinetic.db:/app/kinetic.db
+```
+
+Then point RunCloud's Nginx vhost to `http://127.0.0.1:8000`.
+
+Example Nginx location block:
+
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:8000;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+### GitHub Secrets
+
+Add these repository secrets:
+
+- `SERVER_HOST`
+- `SERVER_USER`
+- `SERVER_SSH_KEY`
+- optional: `SERVER_PORT`
+
+### First deploy checklist
+
+1. Create the `/opt/kinetic` folder and `docker-compose.yml`.
+2. Make sure Docker and Compose are installed on the server.
+3. Add the GitHub secrets above.
+4. Push to `master` and confirm the workflow run succeeds.
+5. Visit your domain and complete the initial admin login.
+
+### Health check and rollback
+
+- Health check: add a lightweight route (like `/health`) that returns `200 OK`,
+  then point your uptime monitor to it.
+- Rollback: change `docker-compose.yml` to the previous tag (or `latest` minus
+  one build), then run `docker compose up -d`.
 
 ## Notes
 

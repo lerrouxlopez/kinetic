@@ -5,9 +5,7 @@
     <div class="col-lg-6">
       <p class="text-uppercase text-muted tracking-wide">Client and manpower control</p>
       <h1 class="display-5 fw-bold">Operate every crew, tool, and project from one branded hub.</h1>
-      <p class="lead text-muted mt-3">
-        Kinetic is a multi-tenant tracking workspace for teams that need projects and people movement in sync.
-      </p>
+      <p class="lead text-muted mt-3">Live ops, tailored to your workflow.</p>
       <div class="d-flex flex-wrap gap-3 mt-4">
         <a class="btn btn-primary btn-lg" href="/register">Create your workspace</a>
         <a class="btn btn-outline-light btn-lg" href="/login">Log in</a>

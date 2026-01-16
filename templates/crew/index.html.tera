@@ -4,7 +4,7 @@
   <div class="page-wide">
     <div class="d-flex flex-column flex-lg-row align-items-start justify-content-between gap-3 mb-4">
       <div>
-        <h2 class="h4 fw-bold mb-1">Crew roster</h2>
+        <h2 class="h4 fw-bold mb-1">Team roster</h2>
         <p class="text-muted mb-0">Track and manage active teams.</p>
       </div>
       <div class="d-flex gap-2">
@@ -24,7 +24,7 @@
     <div class="row g-3 mb-4">
       <div class="col-md-3">
         <div class="stat-tile">
-          <div class="stat-label">Total crews</div>
+          <div class="stat-label">Total teams</div>
           <div class="stat-value">{{ stats.total_crews }}</div>
         </div>
       </div>
@@ -65,12 +65,23 @@
                 <td>
                   <a class="text-decoration-none" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/profile">{{ crew.name }}</a>
                 </td>
-                <td><span class="badge crew-badge">{{ crew.status }}</span></td>
+                <td>
+                  <div class="d-flex flex-column flex-md-row align-items-md-center gap-2">
+                    <span class="badge crew-badge">{{ crew.status }}</span>
+                    <span class="text-muted small">Readiness {{ crew.readiness_score }}%</span>
+                  </div>
+                </td>
                 <td>{{ crew.members_count }}</td>
                 <td class="text-end">
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/edit">Edit</a>
+                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/edit" title="Edit" aria-label="Edit">
+                    <i class="bi bi-pencil"></i>
+                    <span class="visually-hidden">Edit</span>
+                  </a>
                   <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/crew/{{ crew.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                      <i class="bi bi-trash"></i>
+                      <span class="visually-hidden">Delete</span>
+                    </button>
                   </form>
                 </td>
               </tr>

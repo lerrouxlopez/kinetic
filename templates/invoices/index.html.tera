@@ -90,9 +90,15 @@
                   <td><span class="badge crew-badge">{{ invoice.status }}</span></td>
                   <td class="text-end">
                     <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}">View</a>
-                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/edit">Edit</a>
+                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/edit" title="Edit" aria-label="Edit">
+                      <i class="bi bi-pencil"></i>
+                      <span class="visually-hidden">Edit</span>
+                    </a>
                     <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/delete">
-                      <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                      <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                        <i class="bi bi-trash"></i>
+                        <span class="visually-hidden">Delete</span>
+                      </button>
                     </form>
                   </td>
                 </tr>

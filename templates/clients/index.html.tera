@@ -7,7 +7,7 @@
         <h2 class="h4 fw-bold mb-1">Clients</h2>
         <p class="text-muted mb-0">Manage client locations and contacts.</p>
       </div>
-      <div class="d-flex gap-2">
+      <div class="d-flex flex-wrap justify-content-lg-end gap-2">
         <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/dashboard">Back to dashboard</a>
         {% if client_limit_reached | default(value=false) %}
           <button class="btn btn-primary" type="button" disabled title="Plan limit reached ({{ client_limit | default(value=0) }} clients). Upgrade to add more.">New client</button>
@@ -37,21 +37,29 @@
           <tbody>
             {% for client in clients %}
               <tr>
-                <td>
+                <td class="text-nowrap">
                   <a class="link-underline link-underline-opacity-0" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/profile">
                     {{ client.company_name }}
                   </a>
                 </td>
                 <td class="text-muted">{{ client.address }}</td>
-                <td>{{ client.phone }}</td>
+                <td class="text-nowrap">{{ client.phone }}</td>
                 <td>{{ client.email }}</td>
-                <td>{{ client.latitude }} / {{ client.longitude }}</td>
+                <td class="text-muted">{{ client.latitude }} / {{ client.longitude }}</td>
                 <td class="text-end">
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/profile">View</a>
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/edit">Edit</a>
-                  <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-                  </form>
+                  <div class="d-flex justify-content-end align-items-center gap-2 flex-nowrap">
+                    <a class="btn btn-sm btn-outline-light text-nowrap" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/profile">View</a>
+                    <a class="btn btn-sm btn-outline-light text-nowrap" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/edit" title="Edit" aria-label="Edit">
+                      <i class="bi bi-pencil"></i>
+                      <span class="visually-hidden">Edit</span>
+                    </a>
+                    <form class="m-0" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/delete">
+                      <button class="btn btn-sm btn-outline-danger text-nowrap" type="submit" title="Delete" aria-label="Delete">
+                        <i class="bi bi-trash"></i>
+                        <span class="visually-hidden">Delete</span>
+                      </button>
+                    </form>
+                  </div>
                 </td>
               </tr>
             {% else %}

@@ -28,8 +28,14 @@
       </div>
       <div class="d-flex gap-2">
         <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices">Back to invoices</a>
-        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/edit">Edit</a>
-        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/email">Email</a>
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/edit" title="Edit" aria-label="Edit">
+          <i class="bi bi-pencil"></i>
+          <span class="visually-hidden">Edit</span>
+        </a>
+        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/invoices/{{ invoice.id }}/email" title="Email" aria-label="Email">
+          <i class="bi bi-envelope"></i>
+          <span class="visually-hidden">Email</span>
+        </a>
         <button class="btn btn-primary" type="button" onclick="window.print()">Print</button>
       </div>
     </div>

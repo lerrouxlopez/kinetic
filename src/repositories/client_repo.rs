@@ -6,7 +6,7 @@ use crate::Db;
 pub async fn list_clients(db: &Db, tenant_id: i64) -> Result<Vec<Client>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency
+        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency, portal_token
         FROM clients
         WHERE tenant_id = ? AND is_deleted = 0
         ORDER BY id DESC
@@ -29,6 +29,7 @@ pub async fn list_clients(db: &Db, tenant_id: i64) -> Result<Vec<Client>, sqlx::
             longitude: row.get("longitude"),
             stage: row.get("stage"),
             currency: row.get("currency"),
+            portal_token: row.get("portal_token"),
         })
         .collect())
 }
@@ -41,7 +42,7 @@ pub async fn list_clients_paged(
 ) -> Result<Vec<Client>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
-        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency
+        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency, portal_token
         FROM clients
         WHERE tenant_id = ? AND is_deleted = 0
         ORDER BY id DESC
@@ -67,6 +68,7 @@ pub async fn list_clients_paged(
             longitude: row.get("longitude"),
             stage: row.get("stage"),
             currency: row.get("currency"),
+            portal_token: row.get("portal_token"),
         })
         .collect())
 }
@@ -95,7 +97,7 @@ pub async fn find_client_by_id(
 ) -> Result<Option<Client>, sqlx::Error> {
     let row = sqlx::query(
         r#"
-        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency
+        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency, portal_token
         FROM clients
         WHERE id = ? AND tenant_id = ? AND is_deleted = 0
         "#,
@@ -116,6 +118,7 @@ pub async fn find_client_by_id(
         longitude: row.get("longitude"),
         stage: row.get("stage"),
         currency: row.get("currency"),
+        portal_token: row.get("portal_token"),
     }))
 }
 
@@ -130,11 +133,12 @@ pub async fn create_client(
     longitude: &str,
     stage: &str,
     currency: &str,
+    portal_token: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
-        INSERT INTO clients (tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO clients (tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency, portal_token)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         "#,
     )
     .bind(tenant_id)
@@ -146,6 +150,7 @@ pub async fn create_client(
     .bind(longitude)
     .bind(stage)
     .bind(currency)
+    .bind(portal_token)
     .execute(&db.0)
     .await?;
     Ok(())
@@ -184,6 +189,59 @@ pub async fn update_client(
     .execute(&db.0)
     .await?;
     Ok(())
+}
+
+pub async fn update_portal_token(
+    db: &Db,
+    tenant_id: i64,
+    client_id: i64,
+    portal_token: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE clients
+        SET portal_token = ?
+        WHERE id = ? AND tenant_id = ?
+        "#,
+    )
+    .bind(portal_token)
+    .bind(client_id)
+    .bind(tenant_id)
+    .execute(&db.0)
+    .await?;
+    Ok(())
+}
+
+pub async fn find_client_by_portal_token(
+    db: &Db,
+    tenant_id: i64,
+    portal_token: &str,
+) -> Result<Option<Client>, sqlx::Error> {
+    let row = sqlx::query(
+        r#"
+        SELECT id, tenant_id, company_name, address, phone, email, latitude, longitude, stage, currency, portal_token
+        FROM clients
+        WHERE tenant_id = ? AND portal_token = ? AND is_deleted = 0
+        "#,
+    )
+    .bind(tenant_id)
+    .bind(portal_token)
+    .fetch_optional(&db.0)
+    .await?;
+
+    Ok(row.map(|row| Client {
+        id: row.get("id"),
+        tenant_id: row.get("tenant_id"),
+        company_name: row.get("company_name"),
+        address: row.get("address"),
+        phone: row.get("phone"),
+        email: row.get("email"),
+        latitude: row.get("latitude"),
+        longitude: row.get("longitude"),
+        stage: row.get("stage"),
+        currency: row.get("currency"),
+        portal_token: row.get("portal_token"),
+    }))
 }
 
 pub async fn mark_client_deleted(

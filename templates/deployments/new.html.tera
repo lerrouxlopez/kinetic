@@ -44,6 +44,35 @@
                 {% endfor %}
               </select>
             </div>
+            <div class="mb-3">
+              <label class="form-label">Required skills</label>
+              <input class="form-control" name="required_skills" value="{{ form.required_skills }}" placeholder="electrical, safety, audit">
+              <div class="form-text">Comma-separated tags used to recommend the best crew.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Compatibility preference</label>
+              <input class="form-control" name="compatibility_pref" value="{{ form.compatibility_pref }}" placeholder="healthcare, retail, vip">
+              <div class="form-text">Optional tags for client fit or workstyle.</div>
+            </div>
+            {% if recommended_crews | length > 0 %}
+              <div class="card glass-card p-3 mb-3">
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <div class="stat-label">Recommended crews</div>
+                  <span class="text-muted small">Best skill + compatibility match</span>
+                </div>
+                <div class="d-flex flex-column gap-2">
+                  {% for crew in recommended_crews %}
+                    <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-2">
+                      <div>
+                        <div class="fw-semibold">{{ crew.name }}</div>
+                        <div class="text-muted small">Skills {{ crew.skill_matches }}, Compatibility {{ crew.compatibility_matches }}</div>
+                      </div>
+                      <span class="badge crew-badge">Score {{ crew.score }}</span>
+                    </div>
+                  {% endfor %}
+                </div>
+              </div>
+            {% endif %}
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Start</label>
@@ -62,6 +91,17 @@
             <div class="mb-3 mt-3">
               <label class="form-label">Deployment information</label>
               <textarea class="form-control" name="info" rows="4" required>{{ form.info }}</textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Deployment type</label>
+              <select class="form-select" name="deployment_type" required>
+                {% for option in deployment_type_options %}
+                  <option value="{{ option }}" {% if form.deployment_type == option %}selected{% endif %}>
+                    {{ option }}
+                  </option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Select Remote for virtual delivery (no onsite work).</div>
             </div>
             <div class="mb-3">
               <label class="form-label">Status</label>

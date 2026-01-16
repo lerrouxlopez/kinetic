@@ -107,22 +107,90 @@ pub async fn queue_email(
         }
     };
 
-    if workspace.email_provider == "Mailtrap" {
-        if let Err(err) = send_via_mailtrap(&workspace, &to_email, &cc_list, &subject, &html_body).await
-        {
-            let _ = email_repo::update_outbound_email_status(db, outbound_id, "Failed").await;
-            return Err(EmailError {
-                message: format!("Unable to send email via Mailtrap: {err}"),
-                form: EmailFormView::new(subject, html_body),
-            });
+    if matches!(workspace.email_provider.as_str(), "Mailtrap" | "SMTP") {
+        if workspace.email_provider == "Mailtrap" {
+            if let Err(err) =
+                send_via_smtp(&workspace, &to_email, &cc_list, &subject, &html_body).await
+            {
+                let _ = email_repo::update_outbound_email_status_with_error(
+                    db,
+                    outbound_id,
+                    "Failed",
+                    &err,
+                )
+                .await;
+                return Err(EmailError {
+                    message: format!(
+                        "Unable to send email via {}: {err}",
+                        workspace.email_provider
+                    ),
+                    form: EmailFormView::new(subject, html_body),
+                });
+            }
+            let _ =
+                email_repo::update_outbound_email_status_with_error(db, outbound_id, "Sent", "")
+                    .await;
         }
-        let _ = email_repo::update_outbound_email_status(db, outbound_id, "Sent").await;
     }
 
     Ok(())
 }
 
-async fn send_via_mailtrap(
+pub async fn process_outbound_queue(db: &Db) -> Result<(), String> {
+    let queued = email_repo::list_outbound_emails_by_status(db, "Queued", 25)
+        .await
+        .map_err(|err| format!("Unable to load queued emails: {err}"))?;
+
+    for outbound in queued {
+        if !outbound.provider.eq_ignore_ascii_case("SMTP") {
+            continue;
+        }
+        let workspace = match tenant_repo::find_workspace_by_id(db, outbound.tenant_id).await {
+            Ok(Some(workspace)) => workspace,
+            _ => {
+                let _ = email_repo::update_outbound_email_status_with_error(
+                    db,
+                    outbound.id,
+                    "Failed",
+                    "Workspace not found.",
+                )
+                .await;
+                continue;
+            }
+        };
+
+        let result = send_via_smtp(
+            &workspace,
+            &outbound.to_email,
+            &outbound.cc_emails,
+            &outbound.subject,
+            &outbound.html_body,
+        )
+        .await;
+
+        match result {
+            Ok(_) => {
+                let _ =
+                    email_repo::update_outbound_email_status_with_error(db, outbound.id, "Sent", "")
+                        .await;
+            }
+            Err(err) => {
+                eprintln!("SMTP send failed for outbound {}: {}", outbound.id, err);
+                let _ = email_repo::update_outbound_email_status_with_error(
+                    db,
+                    outbound.id,
+                    "Failed",
+                    &err,
+                )
+                .await;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+async fn send_via_smtp(
     workspace: &crate::models::Workspace,
     to_email: &str,
     cc_emails: &str,
@@ -131,7 +199,7 @@ async fn send_via_mailtrap(
 ) -> Result<(), String> {
     let from_address = workspace.email_from_address.trim();
     if from_address.is_empty() {
-        return Err("Mailtrap requires a from address.".to_string());
+        return Err("SMTP requires a from address.".to_string());
     }
     let from = Mailbox::new(
         if workspace.email_from_name.trim().is_empty() {
@@ -205,7 +273,7 @@ async fn send_via_mailtrap(
     transport
         .send(message)
         .await
-        .map_err(|_| "SMTP send failed.".to_string())?;
+        .map_err(|err| format!("SMTP send failed: {err}"))?;
 
     Ok(())
 }

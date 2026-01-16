@@ -122,6 +122,19 @@ async fn workspace_brand(db: &Db, tenant_id: i64) -> crate::models::WorkspaceBra
         .unwrap_or_else(workspace_service::default_workspace_brand_view)
 }
 
+async fn portal_link_for_client(
+    db: &Db,
+    tenant_id: i64,
+    tenant_slug: &str,
+    client: &crate::models::Client,
+) -> String {
+    let portal_token =
+        client_service::ensure_portal_token(db, tenant_id, client.id, &client.portal_token)
+            .await
+            .unwrap_or_else(|_| client.portal_token.clone());
+    format!("/portal/view/{}/{}", tenant_slug, portal_token)
+}
+
 #[get("/<slug>/clients?<page>")]
 pub async fn clients_index(
     cookies: &CookieJar<'_>,
@@ -301,6 +314,7 @@ pub async fn client_show(
             ))
         }
     };
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
 
     let contacts_page = normalize_page(contacts_page);
     let appointments_page = normalize_page(appointments_page);
@@ -364,7 +378,9 @@ pub async fn client_show(
             title: "Client details",
             current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
+            include_map: true,
             client: client,
+            portal_url: portal_url,
             contacts: contacts,
             contacts_count: contacts_count,
             appointments: appointments,
@@ -708,10 +724,11 @@ pub async fn contact_edit_form(
         }
     };
 
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
     let contact = match client_service::find_contact_by_id(db, tenant_id, id, contact_id).await {
         Ok(Some(contact)) => contact,
         _ => {
-            let tenant_slug = current_user.tenant_slug.clone();
             let (contacts_pagination, appointments_pagination) =
                 empty_client_show_pagination(&tenant_slug, id);
             return Ok(Template::render(
@@ -721,6 +738,7 @@ pub async fn contact_edit_form(
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
+                    portal_url: portal_url,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
                     appointments: Vec::<crate::models::Appointment>::new(),
@@ -870,8 +888,10 @@ pub async fn contact_delete(
         }
     };
 
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
+
     if let Err(message) = client_service::delete_contact(db, tenant_id, id, contact_id).await {
-        let tenant_slug = current_user.tenant_slug.clone();
         let (contacts_pagination, appointments_pagination) =
             empty_client_show_pagination(&tenant_slug, id);
         return Err(Template::render(
@@ -881,6 +901,7 @@ pub async fn contact_delete(
                 current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                 client: client,
+                portal_url: portal_url,
                 contacts: Vec::<crate::models::ClientContact>::new(),
                 contacts_count: 0,
                 appointments: Vec::<crate::models::Appointment>::new(),
@@ -945,10 +966,11 @@ pub async fn appointment_new_form(
             ))
         }
     };
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
     let contact = match client_service::find_contact_by_id(db, tenant_id, id, contact_id).await {
         Ok(Some(contact)) => contact,
         _ => {
-            let tenant_slug = current_user.tenant_slug.clone();
             let (contacts_pagination, appointments_pagination) =
                 empty_client_show_pagination(&tenant_slug, id);
             return Ok(Template::render(
@@ -958,6 +980,7 @@ pub async fn appointment_new_form(
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
+                    portal_url: portal_url,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
                     appointments: Vec::<crate::models::Appointment>::new(),
@@ -1036,10 +1059,11 @@ pub async fn appointment_create(
             ))
         }
     };
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
     let contact = match client_service::find_contact_by_id(db, tenant_id, id, contact_id).await {
         Ok(Some(contact)) => contact,
         _ => {
-            let tenant_slug = current_user.tenant_slug.clone();
             let (contacts_pagination, appointments_pagination) =
                 empty_client_show_pagination(&tenant_slug, id);
             return Err(Template::render(
@@ -1049,6 +1073,7 @@ pub async fn appointment_create(
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
+                    portal_url: portal_url,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
                     appointments: Vec::<crate::models::Appointment>::new(),
@@ -1136,10 +1161,11 @@ pub async fn appointment_edit_form(
         }
     };
 
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
     let appointment = match appointment_service::find_appointment(db, tenant_id, id, appointment_id).await {
         Ok(Some(appointment)) => appointment,
         _ => {
-            let tenant_slug = current_user.tenant_slug.clone();
             let (contacts_pagination, appointments_pagination) =
                 empty_client_show_pagination(&tenant_slug, id);
             return Ok(Template::render(
@@ -1149,6 +1175,7 @@ pub async fn appointment_edit_form(
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
+                    portal_url: portal_url,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     appointments: Vec::<crate::models::Appointment>::new(),
                     contacts_count: 0,
@@ -1318,8 +1345,10 @@ pub async fn appointment_delete(
         }
     };
 
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
+
     if let Err(message) = appointment_service::delete_appointment(db, tenant_id, id, appointment_id).await {
-        let tenant_slug = current_user.tenant_slug.clone();
         let (contacts_pagination, appointments_pagination) =
             empty_client_show_pagination(&tenant_slug, id);
         return Err(Template::render(
@@ -1329,6 +1358,7 @@ pub async fn appointment_delete(
                 current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                 client: client,
+                portal_url: portal_url,
                 contacts: Vec::<crate::models::ClientContact>::new(),
                 appointments: Vec::<crate::models::Appointment>::new(),
                 contacts_count: 0,
@@ -1393,10 +1423,11 @@ pub async fn contact_email_form(
             ))
         }
     };
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
     let contact = match client_service::find_contact_by_id(db, tenant_id, id, contact_id).await {
         Ok(Some(contact)) => contact,
         _ => {
-            let tenant_slug = current_user.tenant_slug.clone();
             let (contacts_pagination, appointments_pagination) =
                 empty_client_show_pagination(&tenant_slug, id);
             return Ok(Template::render(
@@ -1406,6 +1437,7 @@ pub async fn contact_email_form(
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
+                    portal_url: portal_url,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
                     appointments: Vec::<crate::models::Appointment>::new(),
@@ -1483,10 +1515,11 @@ pub async fn contact_email_send(
             ))
         }
     };
+    let tenant_slug = current_user.tenant_slug.clone();
+    let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
     let contact = match client_service::find_contact_by_id(db, tenant_id, id, contact_id).await {
         Ok(Some(contact)) => contact,
         _ => {
-            let tenant_slug = current_user.tenant_slug.clone();
             let (contacts_pagination, appointments_pagination) =
                 empty_client_show_pagination(&tenant_slug, id);
             return Err(Template::render(
@@ -1496,6 +1529,7 @@ pub async fn contact_email_send(
                     current_user: Some(current_user),
             workspace_brand: workspace_brand(db, user.tenant_id).await,
                     client: client,
+                    portal_url: portal_url,
                     contacts: Vec::<crate::models::ClientContact>::new(),
                     contacts_count: 0,
                     appointments: Vec::<crate::models::Appointment>::new(),

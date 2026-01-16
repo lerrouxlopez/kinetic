@@ -50,6 +50,8 @@ pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
                logo_path,
                theme_key,
                background_hue,
+               body_font,
+               heading_font,
                plan_key,
                plan_started_at,
                plan_expired,
@@ -86,6 +88,8 @@ pub async fn list_workspaces(db: &Db) -> Result<Vec<Workspace>, sqlx::Error> {
             logo_path: row.get("logo_path"),
             theme_key: row.get("theme_key"),
             background_hue: row.get("background_hue"),
+            body_font: row.get("body_font"),
+            heading_font: row.get("heading_font"),
             plan_key: row.get("plan_key"),
             plan_started_at: row.get("plan_started_at"),
             plan_expired: row.get::<i64, _>("plan_expired") == 1,
@@ -123,6 +127,8 @@ pub async fn list_workspaces_paged(
                logo_path,
                theme_key,
                background_hue,
+               body_font,
+               heading_font,
                plan_key,
                plan_started_at,
                plan_expired,
@@ -162,6 +168,8 @@ pub async fn list_workspaces_paged(
             logo_path: row.get("logo_path"),
             theme_key: row.get("theme_key"),
             background_hue: row.get("background_hue"),
+            body_font: row.get("body_font"),
+            heading_font: row.get("heading_font"),
             plan_key: row.get("plan_key"),
             plan_started_at: row.get("plan_started_at"),
             plan_expired: row.get::<i64, _>("plan_expired") == 1,
@@ -205,6 +213,8 @@ pub async fn find_workspace_by_id(
                logo_path,
                theme_key,
                background_hue,
+               body_font,
+               heading_font,
                plan_key,
                plan_started_at,
                plan_expired,
@@ -240,6 +250,8 @@ pub async fn find_workspace_by_id(
         logo_path: row.get("logo_path"),
         theme_key: row.get("theme_key"),
         background_hue: row.get("background_hue"),
+        body_font: row.get("body_font"),
+        heading_font: row.get("heading_font"),
         plan_key: row.get("plan_key"),
         plan_started_at: row.get("plan_started_at"),
         plan_expired: row.get::<i64, _>("plan_expired") == 1,
@@ -363,14 +375,18 @@ pub async fn update_theme_settings(
     app_name: &str,
     theme_key: &str,
     background_hue: i64,
+    body_font: &str,
+    heading_font: &str,
     logo_path: &str,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
-        "UPDATE tenants SET app_name = ?, theme_key = ?, background_hue = ?, logo_path = ? WHERE id = ?",
+        "UPDATE tenants SET app_name = ?, theme_key = ?, background_hue = ?, body_font = ?, heading_font = ?, logo_path = ? WHERE id = ?",
     )
     .bind(app_name)
     .bind(theme_key)
     .bind(background_hue)
+    .bind(body_font)
+    .bind(heading_font)
     .bind(logo_path)
     .bind(id)
     .execute(&db.0)

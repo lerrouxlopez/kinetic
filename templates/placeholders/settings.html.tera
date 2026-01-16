@@ -280,6 +280,28 @@
             </div>
 
             <div class="mt-4">
+              <div class="row g-3">
+                <div class="col-lg-6">
+                  <label class="form-label">Body font</label>
+                  <select class="form-select" name="body_font">
+                    {% for font in font_options %}
+                      <option value="{{ font }}" {% if theme_form.body_font == font %}selected{% endif %}>{{ font }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="col-lg-6">
+                  <label class="form-label">Heading font</label>
+                  <select class="form-select" name="heading_font">
+                    {% for font in font_options %}
+                      <option value="{{ font }}" {% if theme_form.heading_font == font %}selected{% endif %}>{{ font }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              <div class="form-text text-muted">Fonts apply across the workspace instantly.</div>
+            </div>
+
+            <div class="mt-4">
               <div class="d-flex align-items-center justify-content-between mb-3">
                 <div>
                   <h3 class="h6 fw-semibold mb-1">Theme palette</h3>
@@ -323,7 +345,11 @@
       const refreshSections = () => {
         const value = providerSelect ? providerSelect.value : "";
         sections.forEach((section) => {
-          section.style.display = section.dataset.provider === value ? "block" : "none";
+          const isActive = section.dataset.provider === value;
+          section.style.display = isActive ? "block" : "none";
+          section.querySelectorAll("input, select, textarea").forEach((field) => {
+            field.disabled = !isActive;
+          });
         });
       };
 
