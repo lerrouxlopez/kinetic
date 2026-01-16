@@ -624,6 +624,48 @@ h6,
   color: var(--kinetic-primary-dark);
 }
 
+.client-tabs.nav-tabs {
+  border-bottom: 1px solid var(--kinetic-border);
+  gap: 2px;
+}
+
+.client-tabs.nav-tabs .nav-link {
+  border: 1px solid var(--kinetic-border);
+  border-bottom: none;
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--kinetic-muted);
+}
+
+.client-tabs.nav-tabs .nav-link.active {
+  background: #ffffff;
+  color: var(--kinetic-primary-dark);
+  border-color: var(--kinetic-border) var(--kinetic-border) transparent;
+  box-shadow: 0 -4px 10px rgba(15, 23, 42, 0.08);
+}
+
+.client-tabs.nav-tabs .nav-link:hover {
+  color: var(--kinetic-primary-dark);
+}
+
+.client-tab-content {
+  border: 1px solid var(--kinetic-border);
+  border-top: none;
+  background: rgba(255, 255, 255, 0.92);
+  border-bottom-left-radius: 18px;
+  border-bottom-right-radius: 18px;
+  border-top-right-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 16px 30px rgba(15, 23, 42, 0.06);
+}
+
+.client-tab-content .glass-card {
+  background: #ffffff;
+}
+
 .hue-preview {
   width: 48px;
   height: 48px;

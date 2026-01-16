@@ -81,6 +81,11 @@ use controllers::client_controller::{
     contact_edit_form,
     contact_new_form,
     contact_update,
+    discussion_create,
+    discussion_delete,
+    discussion_edit_form,
+    discussion_new_form,
+    discussion_update,
 };
 use controllers::public_controller::{
     client_portal,
@@ -212,6 +217,11 @@ fn rocket() -> _ {
                 contact_edit_form,
                 contact_update,
                 contact_delete,
+                discussion_new_form,
+                discussion_create,
+                discussion_edit_form,
+                discussion_update,
+                discussion_delete,
                 tracking,
                 tracking_timer_start,
                 tracking_timer_stop,

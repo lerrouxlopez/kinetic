@@ -85,144 +85,217 @@
       </div>
     </div>
 
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <h3 class="h5 fw-semibold mb-0">Contacts</h3>
-      {% if contacts_limit_reached | default(value=false) %}
-        <button class="btn btn-outline-light" type="button" disabled title="Plan limit reached ({{ contacts_limit | default(value=0) }} contacts per client). Upgrade to add more.">Add contact</button>
-      {% else %}
-        <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/new">Add contact</a>
-      {% endif %}
-    </div>
-    <div class="card glass-card p-3">
-      <div class="table-responsive">
-        <table class="table align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Address</th>
-              <th>Email</th>
-              <th>Phone</th>
-              <th>Department</th>
-              <th>Position</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for contact in contacts %}
-              <tr>
-                <td>{{ contact.name }}</td>
-                <td class="text-muted">{{ contact.address }}</td>
-                <td>{{ contact.email }}</td>
-                <td>{{ contact.phone }}</td>
-                <td>{{ contact.department }}</td>
-                <td>{{ contact.position }}</td>
-                <td class="text-end">
-                  {% if appointments_limit_reached | default(value=false) %}
-                    <button class="btn btn-sm btn-outline-light" type="button" disabled title="Plan limit reached ({{ appointments_limit | default(value=0) }} appointments per client). Upgrade to add more.">Add appointment</button>
-                  {% else %}
-                    <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/appointments/new">Add appointment</a>
-                  {% endif %}
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/email" title="Email" aria-label="Email">
-                    <i class="bi bi-envelope"></i>
-                    <span class="visually-hidden">Email</span>
-                  </a>
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/edit" title="Edit" aria-label="Edit">
-                    <i class="bi bi-pencil"></i>
-                    <span class="visually-hidden">Edit</span>
-                  </a>
-                  <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
-                      <i class="bi bi-trash"></i>
-                      <span class="visually-hidden">Delete</span>
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            {% else %}
-              <tr>
-                <td colspan="7" class="text-center text-muted py-4">No contacts yet.</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
+    <ul class="nav nav-tabs client-tabs mb-0" id="clientTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="client-contacts-tab" data-bs-toggle="tab" data-bs-target="#client-contacts" type="button" role="tab" aria-controls="client-contacts" aria-selected="true">Contacts</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="client-appointments-tab" data-bs-toggle="tab" data-bs-target="#client-appointments" type="button" role="tab" aria-controls="client-appointments" aria-selected="false">Appointments</button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="client-discussions-tab" data-bs-toggle="tab" data-bs-target="#client-discussions" type="button" role="tab" aria-controls="client-discussions" aria-selected="false">Discussions</button>
+      </li>
+    </ul>
+    <div class="tab-content client-tab-content">
+      <div class="tab-pane fade show active" id="client-contacts" role="tabpanel" aria-labelledby="client-contacts-tab">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h3 class="h5 fw-semibold mb-0">Contacts</h3>
+          {% if contacts_limit_reached | default(value=false) %}
+            <button class="btn btn-outline-light" type="button" disabled title="Plan limit reached ({{ contacts_limit | default(value=0) }} contacts per client). Upgrade to add more.">Add contact</button>
+          {% else %}
+            <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/new">Add contact</a>
+          {% endif %}
+        </div>
+        <div class="card glass-card p-3">
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Address</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Department</th>
+                  <th>Position</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for contact in contacts %}
+                  <tr>
+                    <td>{{ contact.name }}</td>
+                    <td class="text-muted">{{ contact.address }}</td>
+                    <td>{{ contact.email }}</td>
+                    <td>{{ contact.phone }}</td>
+                    <td>{{ contact.department }}</td>
+                    <td>{{ contact.position }}</td>
+                    <td class="text-end">
+                      {% if appointments_limit_reached | default(value=false) %}
+                        <button class="btn btn-sm btn-outline-light" type="button" disabled title="Plan limit reached ({{ appointments_limit | default(value=0) }} appointments per client). Upgrade to add more.">Add appointment</button>
+                      {% else %}
+                        <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/appointments/new">Add appointment</a>
+                      {% endif %}
+                      <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/email" title="Email" aria-label="Email">
+                        <i class="bi bi-envelope"></i>
+                        <span class="visually-hidden">Email</span>
+                      </a>
+                      <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/edit" title="Edit" aria-label="Edit">
+                        <i class="bi bi-pencil"></i>
+                        <span class="visually-hidden">Edit</span>
+                      </a>
+                      <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/contacts/{{ contact.id }}/delete">
+                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                          <i class="bi bi-trash"></i>
+                          <span class="visually-hidden">Delete</span>
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="7" class="text-center text-muted py-4">No contacts yet.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% if contacts_pagination is defined and contacts_pagination.total_pages > 1 %}
+          <div class="d-flex align-items-center justify-content-between mt-3">
+            <div class="text-muted small">Page {{ contacts_pagination.page }} of {{ contacts_pagination.total_pages }}</div>
+            <nav aria-label="Contacts pagination">
+              <ul class="pagination mb-0">
+                <li class="page-item {% if not contacts_pagination.has_prev %}disabled{% endif %}">
+                  <a class="page-link" href="{{ contacts_pagination.prev_url }}#client-contacts">Previous</a>
+                </li>
+                <li class="page-item {% if not contacts_pagination.has_next %}disabled{% endif %}">
+                  <a class="page-link" href="{{ contacts_pagination.next_url }}#client-contacts">Next</a>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        {% endif %}
+      </div>
+      <div class="tab-pane fade" id="client-appointments" role="tabpanel" aria-labelledby="client-appointments-tab">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h3 class="h5 fw-semibold mb-0">Appointments</h3>
+        </div>
+        <div class="card glass-card p-3">
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Contact</th>
+                  <th>Scheduled</th>
+                  <th>Status</th>
+                  <th>Notes</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for appointment in appointments %}
+                  <tr>
+                    <td>{{ appointment.title }}</td>
+                    <td>{{ appointment.contact_name }}</td>
+                    <td>{{ appointment.scheduled_for }}</td>
+                    <td><span class="badge crew-badge">{{ appointment.status }}</span></td>
+                    <td class="text-muted">{{ appointment.notes }}</td>
+                    <td class="text-end">
+                      <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/edit" title="Edit" aria-label="Edit">
+                        <i class="bi bi-pencil"></i>
+                        <span class="visually-hidden">Edit</span>
+                      </a>
+                      <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/delete">
+                        <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                          <i class="bi bi-trash"></i>
+                          <span class="visually-hidden">Delete</span>
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="6" class="text-center text-muted py-4">No appointments yet.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        {% if appointments_pagination is defined and appointments_pagination.total_pages > 1 %}
+          <div class="d-flex align-items-center justify-content-between mt-3">
+            <div class="text-muted small">Page {{ appointments_pagination.page }} of {{ appointments_pagination.total_pages }}</div>
+            <nav aria-label="Appointments pagination">
+              <ul class="pagination mb-0">
+                <li class="page-item {% if not appointments_pagination.has_prev %}disabled{% endif %}">
+                  <a class="page-link" href="{{ appointments_pagination.prev_url }}#client-appointments">Previous</a>
+                </li>
+                <li class="page-item {% if not appointments_pagination.has_next %}disabled{% endif %}">
+                  <a class="page-link" href="{{ appointments_pagination.next_url }}#client-appointments">Next</a>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        {% endif %}
+      </div>
+      <div class="tab-pane fade" id="client-discussions" role="tabpanel" aria-labelledby="client-discussions-tab">
+        {% set discussions_list = discussions | default(value=[]) %}
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <h3 class="h5 fw-semibold mb-0">Discussions</h3>
+          {% if can_edit_clients | default(value=false) %}
+            <a class="btn btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/discussions/new">Add discussion</a>
+          {% else %}
+            <button class="btn btn-outline-light" type="button" disabled>Add discussion</button>
+          {% endif %}
+        </div>
+        <div class="card glass-card p-3">
+          <div class="table-responsive">
+            <table class="table align-middle mb-0">
+              <thead>
+                <tr>
+                  <th>Message</th>
+                  <th>Tags</th>
+                  <th>From</th>
+                  <th>Added</th>
+                  <th class="text-end">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for discussion in discussions_list %}
+                  <tr>
+                    <td>{{ discussion.message }}</td>
+                    <td class="text-muted">{{ discussion.tagged_user_email | default(value="--") }}</td>
+                    <td>{{ discussion.author_email }}</td>
+                    <td class="text-muted">{{ discussion.created_at }}</td>
+                    <td class="text-end">
+                      {% if can_edit_clients | default(value=false) %}
+                        <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/discussions/{{ discussion.id }}/edit" title="Edit" aria-label="Edit">
+                          <i class="bi bi-pencil"></i>
+                          <span class="visually-hidden">Edit</span>
+                        </a>
+                      {% endif %}
+                      {% if can_delete_clients | default(value=false) %}
+                        <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/discussions/{{ discussion.id }}/delete" onsubmit="return confirm('Delete this discussion?');">
+                          <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
+                            <i class="bi bi-trash"></i>
+                            <span class="visually-hidden">Delete</span>
+                          </button>
+                        </form>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% else %}
+                  <tr>
+                    <td colspan="5" class="text-center text-muted py-4">No discussions yet.</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
-    {% if contacts_pagination is defined and contacts_pagination.total_pages > 1 %}
-      <div class="d-flex align-items-center justify-content-between mt-3">
-        <div class="text-muted small">Page {{ contacts_pagination.page }} of {{ contacts_pagination.total_pages }}</div>
-        <nav aria-label="Contacts pagination">
-          <ul class="pagination mb-0">
-            <li class="page-item {% if not contacts_pagination.has_prev %}disabled{% endif %}">
-              <a class="page-link" href="{{ contacts_pagination.prev_url }}">Previous</a>
-            </li>
-            <li class="page-item {% if not contacts_pagination.has_next %}disabled{% endif %}">
-              <a class="page-link" href="{{ contacts_pagination.next_url }}">Next</a>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    {% endif %}
-    <div class="d-flex align-items-center justify-content-between mt-5 mb-3">
-      <h3 class="h5 fw-semibold mb-0">Appointments</h3>
-    </div>
-    <div class="card glass-card p-3">
-      <div class="table-responsive">
-        <table class="table align-middle mb-0">
-          <thead>
-            <tr>
-              <th>Title</th>
-              <th>Contact</th>
-              <th>Scheduled</th>
-              <th>Status</th>
-              <th>Notes</th>
-              <th class="text-end">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for appointment in appointments %}
-              <tr>
-                <td>{{ appointment.title }}</td>
-                <td>{{ appointment.contact_name }}</td>
-                <td>{{ appointment.scheduled_for }}</td>
-                <td><span class="badge crew-badge">{{ appointment.status }}</span></td>
-                <td class="text-muted">{{ appointment.notes }}</td>
-                <td class="text-end">
-                  <a class="btn btn-sm btn-outline-light" href="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/edit" title="Edit" aria-label="Edit">
-                    <i class="bi bi-pencil"></i>
-                    <span class="visually-hidden">Edit</span>
-                  </a>
-                  <form class="d-inline" method="post" action="/{{ current_user.tenant_slug }}/clients/{{ client.id }}/appointments/{{ appointment.id }}/delete">
-                    <button class="btn btn-sm btn-outline-danger" type="submit" title="Delete" aria-label="Delete">
-                      <i class="bi bi-trash"></i>
-                      <span class="visually-hidden">Delete</span>
-                    </button>
-                  </form>
-                </td>
-              </tr>
-            {% else %}
-              <tr>
-                <td colspan="6" class="text-center text-muted py-4">No appointments yet.</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    </div>
-    {% if appointments_pagination is defined and appointments_pagination.total_pages > 1 %}
-      <div class="d-flex align-items-center justify-content-between mt-3">
-        <div class="text-muted small">Page {{ appointments_pagination.page }} of {{ appointments_pagination.total_pages }}</div>
-        <nav aria-label="Appointments pagination">
-          <ul class="pagination mb-0">
-            <li class="page-item {% if not appointments_pagination.has_prev %}disabled{% endif %}">
-              <a class="page-link" href="{{ appointments_pagination.prev_url }}">Previous</a>
-            </li>
-            <li class="page-item {% if not appointments_pagination.has_next %}disabled{% endif %}">
-              <a class="page-link" href="{{ appointments_pagination.next_url }}">Next</a>
-            </li>
-          </ul>
-        </nav>
-      </div>
-    {% endif %}
   </div>
 
   <script>
@@ -244,6 +317,23 @@
         attribution: "&copy; OpenStreetMap contributors"
       }).addTo(map);
       L.marker([lat, lng]).addTo(map);
+    })();
+  </script>
+  <script>
+    (function () {
+      if (typeof bootstrap === "undefined") {
+        return;
+      }
+      var hash = window.location.hash;
+      if (!hash) {
+        return;
+      }
+      var trigger = document.querySelector('[data-bs-target="' + hash + '"]');
+      if (!trigger) {
+        return;
+      }
+      var tab = new bootstrap.Tab(trigger);
+      tab.show();
     })();
   </script>
 {% endblock content %}

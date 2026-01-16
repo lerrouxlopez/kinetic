@@ -11,11 +11,14 @@ use crate::models::{
     ClientForm,
     ClientFormView,
     CurrentUserView,
+    DiscussionForm,
+    DiscussionFormView,
     EmailForm,
     EmailFormView,
     PaginationView,
 };
-use crate::services::{access_service, appointment_service, auth_service, client_service, email_service, workspace_service};
+use crate::repositories::user_repo;
+use crate::services::{access_service, appointment_service, auth_service, client_service, discussion_service, email_service, workspace_service};
 use crate::Db;
 
 const PER_PAGE: usize = 10;
@@ -371,6 +374,11 @@ pub async fn client_show(
         .appointments_per_client
         .map(|limit| total_appointments >= limit)
         .unwrap_or(false);
+    let discussions = discussion_service::list_discussions_by_client(db, tenant_id, id)
+        .await
+        .unwrap_or_default();
+    let can_edit_clients = access_service::can_edit(db, &user, "clients").await;
+    let can_delete_clients = access_service::can_delete(db, &user, "clients").await;
 
     Ok(Template::render(
         "clients/show",
@@ -392,6 +400,9 @@ pub async fn client_show(
             contacts_limit_reached: contacts_limit_reached,
             appointments_limit: appointments_limit,
             appointments_limit_reached: appointments_limit_reached,
+            discussions: discussions,
+            can_edit_clients: can_edit_clients,
+            can_delete_clients: can_delete_clients,
         },
     ))
 }
@@ -1362,6 +1373,372 @@ pub async fn appointment_delete(
                 contacts: Vec::<crate::models::ClientContact>::new(),
                 appointments: Vec::<crate::models::Appointment>::new(),
                 contacts_count: 0,
+                appointments_count: 0,
+                deployments_count: 0,
+                contacts_pagination: contacts_pagination,
+                appointments_pagination: appointments_pagination,
+                error: message,
+            },
+        ));
+    }
+
+    Ok(Redirect::to(uri!(client_show(
+        slug = current_user.tenant_slug,
+        id = id,
+        contacts_page = Option::<usize>::None,
+        appointments_page = Option::<usize>::None
+    ))))
+}
+
+#[get("/<slug>/clients/<id>/discussions/new")]
+pub async fn discussion_new_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+) -> Result<Template, Redirect> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(discussion_new_form(
+            slug = current_user.tenant_slug,
+            id = id
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "clients").await {
+        return Err(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+
+    let client = match client_service::find_client_by_id(db, tenant_id, id).await {
+        Ok(Some(client)) => client,
+        _ => {
+            return Ok(Template::render(
+                "clients/index",
+                context! {
+                    title: "Clients",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    clients: Vec::<crate::models::Client>::new(),
+                    error: "Client not found.".to_string(),
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    Ok(Template::render(
+        "clients/discussion_new",
+        context! {
+            title: "New discussion",
+            current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            client: client,
+            users: users,
+            error: Option::<String>::None,
+            form: DiscussionFormView::new("", None),
+        },
+    ))
+}
+
+#[post("/<slug>/clients/<id>/discussions", data = "<form>")]
+pub async fn discussion_create(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    form: Form<DiscussionForm>,
+) -> Result<Redirect, Template> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "clients").await {
+        return Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let client = match client_service::find_client_by_id(db, tenant_id, id).await {
+        Ok(Some(client)) => client,
+        _ => {
+            return Err(Template::render(
+                "clients/index",
+                context! {
+                    title: "Clients",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    clients: Vec::<crate::models::Client>::new(),
+                    error: "Client not found.".to_string(),
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    match discussion_service::create_discussion(db, tenant_id, id, user.id, form).await {
+        Ok(_) => Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        )))),
+        Err(err) => Err(Template::render(
+            "clients/discussion_new",
+            context! {
+                title: "New discussion",
+                current_user: Some(current_user),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                client: client,
+                users: users,
+                error: err.message,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[get("/<slug>/clients/<id>/discussions/<discussion_id>/edit")]
+pub async fn discussion_edit_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    discussion_id: i64,
+) -> Result<Template, Redirect> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(discussion_edit_form(
+            slug = current_user.tenant_slug,
+            id = id,
+            discussion_id = discussion_id
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "clients").await {
+        return Err(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+    let client = match client_service::find_client_by_id(db, tenant_id, id).await {
+        Ok(Some(client)) => client,
+        _ => {
+            return Ok(Template::render(
+                "clients/index",
+                context! {
+                    title: "Clients",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    clients: Vec::<crate::models::Client>::new(),
+                    error: "Client not found.".to_string(),
+                },
+            ))
+        }
+    };
+    let discussion = match discussion_service::find_discussion_by_id(db, tenant_id, id, discussion_id)
+        .await
+        .ok()
+        .flatten()
+    {
+        Some(discussion) => discussion,
+        None => {
+            return Ok(Template::render(
+                "clients/index",
+                context! {
+                    title: "Clients",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    clients: Vec::<crate::models::Client>::new(),
+                    error: "Discussion not found.".to_string(),
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    Ok(Template::render(
+        "clients/discussion_edit",
+        context! {
+            title: "Edit discussion",
+            current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            client: client,
+            users: users,
+            discussion_id: discussion_id,
+            error: Option::<String>::None,
+            form: DiscussionFormView::new(discussion.message, discussion.tagged_user_id),
+        },
+    ))
+}
+
+#[post("/<slug>/clients/<id>/discussions/<discussion_id>", data = "<form>")]
+pub async fn discussion_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    discussion_id: i64,
+    form: Form<DiscussionForm>,
+) -> Result<Redirect, Template> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "clients").await {
+        return Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let client = match client_service::find_client_by_id(db, tenant_id, id).await {
+        Ok(Some(client)) => client,
+        _ => {
+            return Err(Template::render(
+                "clients/index",
+                context! {
+                    title: "Clients",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    clients: Vec::<crate::models::Client>::new(),
+                    error: "Client not found.".to_string(),
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    match discussion_service::update_discussion(db, tenant_id, id, discussion_id, form).await {
+        Ok(_) => Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        )))),
+        Err(err) => Err(Template::render(
+            "clients/discussion_edit",
+            context! {
+                title: "Edit discussion",
+                current_user: Some(current_user),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                client: client,
+                users: users,
+                discussion_id: discussion_id,
+                error: err.message,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[post("/<slug>/clients/<id>/discussions/<discussion_id>/delete")]
+pub async fn discussion_delete(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    discussion_id: i64,
+) -> Result<Redirect, Template> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_delete(db, &user, "clients").await {
+        return Ok(Redirect::to(uri!(client_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            contacts_page = Option::<usize>::None,
+            appointments_page = Option::<usize>::None
+        ))));
+    }
+
+    if let Err(message) = discussion_service::delete_discussion(db, tenant_id, id, discussion_id)
+        .await
+        .map_err(|err| format!("Unable to delete discussion: {err}"))
+    {
+        let tenant_slug = current_user.tenant_slug.clone();
+        let client = match client_service::find_client_by_id(db, tenant_id, id).await {
+            Ok(Some(client)) => client,
+            _ => {
+                return Err(Template::render(
+                    "clients/index",
+                    context! {
+                        title: "Clients",
+                        current_user: Some(current_user),
+                        workspace_brand: workspace_brand(db, user.tenant_id).await,
+                        clients: Vec::<crate::models::Client>::new(),
+                        error: message,
+                    },
+                ))
+            }
+        };
+        let portal_url = portal_link_for_client(db, tenant_id, &tenant_slug, &client).await;
+        let (contacts_pagination, appointments_pagination) =
+            empty_client_show_pagination(&tenant_slug, id);
+        return Err(Template::render(
+            "clients/show",
+            context! {
+                title: "Client details",
+                current_user: Some(current_user),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                client: client,
+                portal_url: portal_url,
+                contacts: Vec::<crate::models::ClientContact>::new(),
+                contacts_count: 0,
+                appointments: Vec::<crate::models::Appointment>::new(),
                 appointments_count: 0,
                 deployments_count: 0,
                 contacts_pagination: contacts_pagination,

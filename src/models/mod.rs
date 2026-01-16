@@ -135,6 +135,12 @@ pub struct AppointmentForm {
 }
 
 #[derive(FromForm)]
+pub struct DiscussionForm {
+    pub message: String,
+    pub tagged_user_id: Option<i64>,
+}
+
+#[derive(FromForm)]
 pub struct DeploymentForm {
     pub client_id: i64,
     pub crew_id: i64,
@@ -298,6 +304,19 @@ pub struct Appointment {
     pub scheduled_for: String,
     pub status: String,
     pub notes: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Discussion {
+    pub id: i64,
+    pub tenant_id: i64,
+    pub client_id: i64,
+    pub author_id: i64,
+    pub author_email: String,
+    pub tagged_user_id: Option<i64>,
+    pub tagged_user_email: Option<String>,
+    pub message: String,
+    pub created_at: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -504,6 +523,12 @@ pub struct AppointmentFormView {
     pub scheduled_for: String,
     pub status: String,
     pub notes: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct DiscussionFormView {
+    pub message: String,
+    pub tagged_user_id: Option<i64>,
 }
 
 #[derive(Serialize, Clone)]
@@ -842,6 +867,15 @@ impl AppointmentFormView {
             scheduled_for: scheduled_for.into(),
             status: status.into(),
             notes: notes.into(),
+        }
+    }
+}
+
+impl DiscussionFormView {
+    pub fn new(message: impl Into<String>, tagged_user_id: Option<i64>) -> Self {
+        DiscussionFormView {
+            message: message.into(),
+            tagged_user_id,
         }
     }
 }
