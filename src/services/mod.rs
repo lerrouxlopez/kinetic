@@ -7,6 +7,7 @@ pub mod crew_discussion_service;
 pub mod appointment_service;
 pub mod discussion_service;
 pub mod deployment_service;
+pub mod deployment_discussion_service;
 pub mod email_service;
 pub mod invoice_service;
 pub mod schema_service;
