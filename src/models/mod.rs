@@ -320,6 +320,19 @@ pub struct Discussion {
 }
 
 #[derive(Serialize, Clone)]
+pub struct CrewDiscussion {
+    pub id: i64,
+    pub tenant_id: i64,
+    pub crew_id: i64,
+    pub author_id: i64,
+    pub author_email: String,
+    pub tagged_user_id: Option<i64>,
+    pub tagged_user_email: Option<String>,
+    pub message: String,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Clone)]
 pub struct Deployment {
     pub id: i64,
     pub tenant_id: i64,

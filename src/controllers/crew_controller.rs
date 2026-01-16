@@ -9,9 +9,11 @@ use crate::models::{
     CrewMemberForm,
     CrewMemberFormView,
     CurrentUserView,
+    DiscussionForm,
+    DiscussionFormView,
     PaginationView,
 };
-use crate::services::{access_service, auth_service, crew_service, workspace_service};
+use crate::services::{access_service, auth_service, crew_discussion_service, crew_service, workspace_service};
 use crate::repositories::user_repo;
 use crate::Db;
 
@@ -206,6 +208,11 @@ pub async fn crew_show(
         .members_per_crew
         .map(|limit| total_members >= limit)
         .unwrap_or(false);
+    let discussions = crew_discussion_service::list_discussions_by_crew(db, tenant_id, id)
+        .await
+        .unwrap_or_default();
+    let can_edit_crew = access_service::can_edit(db, &user, "crew").await;
+    let can_delete_crew = access_service::can_delete(db, &user, "crew").await;
 
     Ok(Template::render(
         "crew/show",
@@ -219,6 +226,9 @@ pub async fn crew_show(
             member_limit_reached: member_limit_reached,
             member_limit: member_limit,
             members_pagination: members_pagination,
+            discussions: discussions,
+            can_edit_crew: can_edit_crew,
+            can_delete_crew: can_delete_crew,
         },
     ))
 }
@@ -732,6 +742,347 @@ pub async fn crew_member_delete(
                 members_pagination: members_pagination,
                 error: message,
                 member_limit_reached: false,
+                crew_limit_reached: false,
+            },
+        ));
+    }
+
+    Ok(Redirect::to(uri!(crew_show(
+        slug = current_user.tenant_slug,
+        id = id,
+        members_page = Option::<usize>::None
+    ))))
+}
+
+#[get("/<slug>/crew/<id>/discussions/new")]
+pub async fn crew_discussion_new_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+) -> Result<Template, Redirect> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_discussion_new_form(
+            slug = current_user.tenant_slug,
+            id = id
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Ok(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    crews: Vec::<crate::models::CrewRosterView>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    Ok(Template::render(
+        "crew/discussion_new",
+        context! {
+            title: "New discussion",
+            current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            crew: crew,
+            users: users,
+            error: Option::<String>::None,
+            form: DiscussionFormView::new("", None),
+        },
+    ))
+}
+
+#[post("/<slug>/crew/<id>/discussions", data = "<form>")]
+pub async fn crew_discussion_create(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    form: Form<DiscussionForm>,
+) -> Result<Redirect, Template> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Err(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    crews: Vec::<crate::models::CrewRosterView>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    match crew_discussion_service::create_discussion(db, tenant_id, id, user.id, form).await {
+        Ok(_) => Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        )))),
+        Err(err) => Err(Template::render(
+            "crew/discussion_new",
+            context! {
+                title: "New discussion",
+                current_user: Some(current_user),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                crew: crew,
+                users: users,
+                error: err.message,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[get("/<slug>/crew/<id>/discussions/<discussion_id>/edit")]
+pub async fn crew_discussion_edit_form(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    discussion_id: i64,
+) -> Result<Template, Redirect> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Err(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Err(Redirect::to(uri!(crew_discussion_edit_form(
+            slug = current_user.tenant_slug,
+            id = id,
+            discussion_id = discussion_id
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Err(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Ok(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    crews: Vec::<crate::models::CrewRosterView>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
+                },
+            ))
+        }
+    };
+    let discussion =
+        match crew_discussion_service::find_discussion_by_id(db, tenant_id, id, discussion_id)
+            .await
+            .ok()
+            .flatten()
+        {
+            Some(discussion) => discussion,
+            None => {
+                return Ok(Template::render(
+                    "crew/index",
+                    context! {
+                        title: "Crew roster",
+                        current_user: Some(current_user),
+                        workspace_brand: workspace_brand(db, user.tenant_id).await,
+                        crews: Vec::<crate::models::CrewRosterView>::new(),
+                        stats: crew_service::stats_from_crews(&[]),
+                        error: "Discussion not found.".to_string(),
+                        crew_limit_reached: false,
+                    },
+                ))
+            }
+        };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    Ok(Template::render(
+        "crew/discussion_edit",
+        context! {
+            title: "Edit discussion",
+            current_user: Some(current_user),
+            workspace_brand: workspace_brand(db, user.tenant_id).await,
+            crew: crew,
+            users: users,
+            discussion_id: discussion_id,
+            error: Option::<String>::None,
+            form: DiscussionFormView::new(discussion.message, discussion.tagged_user_id),
+        },
+    ))
+}
+
+#[post("/<slug>/crew/<id>/discussions/<discussion_id>", data = "<form>")]
+pub async fn crew_discussion_update(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    discussion_id: i64,
+    form: Form<DiscussionForm>,
+) -> Result<Redirect, Template> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_edit(db, &user, "crew").await {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    let form = form.into_inner();
+    let crew = match crew_service::find_crew_by_id(db, tenant_id, id).await {
+        Ok(Some(crew)) => crew,
+        _ => {
+            return Err(Template::render(
+                "crew/index",
+                context! {
+                    title: "Crew roster",
+                    current_user: Some(current_user),
+                    workspace_brand: workspace_brand(db, user.tenant_id).await,
+                    crews: Vec::<crate::models::CrewRosterView>::new(),
+                    stats: crew_service::stats_from_crews(&[]),
+                    error: "Crew not found.".to_string(),
+                    crew_limit_reached: false,
+                },
+            ))
+        }
+    };
+    let users = user_repo::list_users_by_tenant(db, tenant_id)
+        .await
+        .unwrap_or_default();
+
+    match crew_discussion_service::update_discussion(db, tenant_id, id, discussion_id, form).await {
+        Ok(_) => Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        )))),
+        Err(err) => Err(Template::render(
+            "crew/discussion_edit",
+            context! {
+                title: "Edit discussion",
+                current_user: Some(current_user),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                crew: crew,
+                users: users,
+                discussion_id: discussion_id,
+                error: err.message,
+                form: err.form,
+            },
+        )),
+    }
+}
+
+#[post("/<slug>/crew/<id>/discussions/<discussion_id>/delete")]
+pub async fn crew_discussion_delete(
+    cookies: &CookieJar<'_>,
+    db: &Db,
+    slug: &str,
+    id: i64,
+    discussion_id: i64,
+) -> Result<Redirect, Template> {
+    let (tenant_id, user) = match tenant_from_cookies(cookies, db).await {
+        Some(data) => data,
+        None => return Ok(Redirect::to(uri!(crate::controllers::public_controller::login_form))),
+    };
+    let current_user = CurrentUserView::from(&user);
+    if current_user.tenant_slug != slug {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+    if !access_service::can_delete(db, &user, "crew").await {
+        return Ok(Redirect::to(uri!(crew_show(
+            slug = current_user.tenant_slug,
+            id = id,
+            members_page = Option::<usize>::None
+        ))));
+    }
+
+    if let Err(message) = crew_discussion_service::delete_discussion(db, tenant_id, id, discussion_id)
+        .await
+        .map_err(|err| format!("Unable to delete discussion: {err}"))
+    {
+        return Err(Template::render(
+            "crew/index",
+            context! {
+                title: "Crew roster",
+                current_user: Some(current_user),
+                workspace_brand: workspace_brand(db, user.tenant_id).await,
+                crews: Vec::<crate::models::CrewRosterView>::new(),
+                stats: crew_service::stats_from_crews(&[]),
+                error: message,
                 crew_limit_reached: false,
             },
         ));

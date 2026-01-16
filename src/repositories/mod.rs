@@ -3,6 +3,7 @@ pub mod client_repo;
 pub mod discussion_repo;
 pub mod crew_repo;
 pub mod crew_member_repo;
+pub mod crew_discussion_repo;
 pub mod appointment_repo;
 pub mod deployment_repo;
 pub mod deployment_update_repo;

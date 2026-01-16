@@ -3,6 +3,7 @@ pub mod access_service;
 pub mod auth_service;
 pub mod client_service;
 pub mod crew_service;
+pub mod crew_discussion_service;
 pub mod appointment_service;
 pub mod discussion_service;
 pub mod deployment_service;
