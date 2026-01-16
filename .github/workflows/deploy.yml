@@ -13,6 +13,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check deploy secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.SERVER_HOST }}" || (echo "Missing SERVER_HOST" && exit 1)
+          test -n "${{ secrets.SERVER_USER }}" || (echo "Missing SERVER_USER" && exit 1)
+          test -n "${{ secrets.SERVER_SSH_KEY }}" || (echo "Missing SERVER_SSH_KEY" && exit 1)
+
       - name: Set image name
         shell: bash
         run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/kinetic" >> "$GITHUB_ENV"
@@ -30,13 +37,6 @@ jobs:
           context: .
           push: true
           tags: ${{ env.IMAGE_NAME }}:latest
-
-      - name: Check deploy secrets
-        shell: bash
-        run: |
-          test -n "${{ secrets.SERVER_HOST }}" || (echo "Missing SERVER_HOST" && exit 1)
-          test -n "${{ secrets.SERVER_USER }}" || (echo "Missing SERVER_USER" && exit 1)
-          test -n "${{ secrets.SERVER_SSH_KEY }}" || (echo "Missing SERVER_SSH_KEY" && exit 1)
 
       - name: Deploy on server
         uses: appleboy/ssh-action@v1.0.3
